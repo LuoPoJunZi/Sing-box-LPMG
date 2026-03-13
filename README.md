@@ -109,6 +109,6 @@ Usage: sing-box [options]... [args]...
    h, help                                         显示此帮助界面
 
 谨慎使用 del, ddel, 此选项会直接删除配置; 无需确认
-反馈问题) https://github.com/LuoPoJunZi/sing-box/issues
+反馈问题) https://github.com/LuoPoJunZi/Sing-box-LPMG/issues
 文档(doc) https://233boy.com/sing-box/sing-box-script/
 ```
