@@ -1,6 +1,6 @@
 #!/bin/bash
 
-author=233boy
+author=LuoPoJunZi
 # github=https://github.com/LuoPoJunZi/Sing-box-LPMG
 
 # bash fonts colors

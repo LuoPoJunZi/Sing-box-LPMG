@@ -79,16 +79,14 @@ show_help() {
 }
 
 about() {
-    ####### 要点13脸吗只会改我链接的小人 #######
-    unset c n m s b
     msg
-    msg "网站: $(msg_ul https://233boy.com)"
-    msg "频道: $(msg_ul https://t.me/tg2333)"
-    msg "群组: $(msg_ul https://t.me/tg233boy)"
-    msg "Github: $(msg_ul https://github.com/${is_sh_repo})"
-    msg "Twitter: $(msg_ul https://twitter.com/ai233boy)"
-    msg "$is_core_name site: $(msg_ul https://sing-box.sagernet.org/)"
-    msg "$is_core_name core: $(msg_ul https://github.com/${is_core_repo})"
+    msg "============== 关于本脚本 =============="
+    msg "维护作者: LuoPoJunZi (魔改版)"
+    msg "项目 Github: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
+    msg "特别鸣谢: 基于 233boy 原版二次开发"
+    msg "----------------------------------------"
+    msg "$is_core_name 官网: $(msg_ul https://sing-box.sagernet.org/)"
+    msg "$is_core_name 核心: $(msg_ul https://github.com/${is_core_repo})"
+    msg "========================================"
     msg
-    ####### 要点13脸吗只会改我链接的小人 #######
 }

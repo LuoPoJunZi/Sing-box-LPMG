@@ -1,6 +1,6 @@
 # 介绍
 
-最好用的 sing-box 一键安装脚本 & 管理脚本
+最好用的 sing-box 一键安装脚本 & 管理脚本，基于 [233boy](https://github.com/233boy/sing-box) 原版二次开发
 
 # 特点
 
@@ -109,6 +109,5 @@ Usage: sing-box [options]... [args]...
    h, help                                         显示此帮助界面
 
 谨慎使用 del, ddel, 此选项会直接删除配置; 无需确认
-反馈问题) https://github.com/LuoPoJunZi/Sing-box-LPMG/issues
 文档(doc) https://233boy.com/sing-box/sing-box-script/
 ```
