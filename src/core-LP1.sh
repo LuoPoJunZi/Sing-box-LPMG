@@ -95,6 +95,7 @@ msg_ul() {
     echo -e "\e[4m$@\e[0m"
 }
 
+# pause
 pause() {
     echo
     echo -ne "按 $(_green Enter 回车键) 继续, 或按 $(_red Ctrl + C) 取消."
@@ -119,6 +120,9 @@ get_ip() {
     fi
 }
 
+# ==============================================================
+# 新增功能：智能防火墙放行
+# ==============================================================
 firewall_allow() {
     local target_port=$1
     if [[ -z "$target_port" ]]; then
@@ -137,9 +141,11 @@ firewall_allow() {
     elif command -v iptables >/dev/null 2>&1; then
         iptables -I INPUT -p tcp --dport ${target_port} -j ACCEPT >/dev/null 2>&1
         iptables -I INPUT -p udp --dport ${target_port} -j ACCEPT >/dev/null 2>&1
+        # CentOS iptables save
         if [[ -f /etc/sysconfig/iptables ]]; then
             service iptables save >/dev/null 2>&1
         fi
+        # Ubuntu/Debian iptables save
         if command -v netfilter-persistent >/dev/null 2>&1; then
             netfilter-persistent save >/dev/null 2>&1
         fi
@@ -154,12 +160,14 @@ get_port() {
         if [[ $is_count -ge 233 ]]; then
             err "自动获取可用端口失败次数达到 233 次, 请检查端口占用情况."
         fi
+        # 随机分配高位端口
         tmp_port=$(shuf -i 20000-65535 -n 1)
         if [[ ! $(is_test port_used $tmp_port) && $tmp_port != $port ]]; then
             break
         fi
     done
     
+    # 拿到端口后，自动尝试放行防火墙
     if [[ $tmp_port ]]; then
         firewall_allow "$tmp_port"
     fi
@@ -227,6 +235,7 @@ is_port_used() {
     msg "请执行: $(_yellow "${cmd} update -y; ${cmd} install net-tools -y") 来修复此问题."
 }
 
+# ask input a string or pick a option for list.
 ask() {
     case $1 in
     set_ss_method)
@@ -237,11 +246,14 @@ ask() {
         is_ask_set=ss_method
         ;;
     set_protocol)
+        # ==============================================================
+        # 模板 B：分类区块型协议选择界面
+        # ==============================================================
         echo -e "\e[96m=====================================================\e[0m"
         echo -e "                 请选择要添加的协议"
         echo -e "\e[96m=====================================================\e[0m"
         echo -e "  \e[93m[ 基础协议 ]\e[0m"
-        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan       \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
+        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan      \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
         echo -e "  \e[92m(5)\e[0m VMess-TCP   \e[92m(6)\e[0m VMess-HTTP   \e[92m(7)\e[0m VMess-QUIC  \e[92m(8)\e[0m Shadowsocks"
         echo -e "  \e[92m(20)\e[0m Socks\n"
         echo -e "  \e[93m[ TLS 隧道 ]\e[0m"
@@ -299,12 +311,6 @@ ask() {
             export $is_ask_set=$is_default_arg
             break
         fi
-        
-        # 防止误按回车直接退出，这里做了特殊处理
-        if [[ ! $REPLY && ! $is_default_arg && ! $is_emtpy_exit ]]; then
-            continue
-        fi
-
         if [[ $1 == "set_protocol" ]]; then
             if [[ "$REPLY" =~ ^([1-9]|1[0-9]|20)$ ]]; then
                 export $is_ask_set="${protocol_list[$REPLY-1]}"
@@ -363,27 +369,23 @@ ask() {
     unset is_opt_msg is_opt_input_msg is_tmp_list is_ask_result is_default_arg is_emtpy_exit
 }
 
+# create file
 create() {
     case $1 in
     server)
         is_tls=none
         get new
+        # listen
         is_listen='listen: "::"'
-        
-        local safe_remark="${custom_remark//\//_}"
-        if [[ -z "$safe_remark" ]]; then
-            safe_remark="luopojunzi"
-        fi
-
+        # file name
         if [[ $host ]]; then
-            is_config_name=$2-${safe_remark}-${host}.json
+            is_config_name=$2-${host}.json
             is_listen='listen: "127.0.0.1"'
         else
-            is_config_name=$2-${safe_remark}-${port}.json
+            is_config_name=$2-${port}.json
         fi
-        
         is_json_file=$is_conf_dir/$is_config_name
-        
+        # get json
         if [[ $is_change || ! $json_str ]]; then
             get protocol $2
         fi
@@ -392,27 +394,30 @@ create() {
         fi
         is_new_json=$(jq "{inbounds:[{tag:\"$is_config_name\",type:\"$is_protocol\",$is_listen,listen_port:$port,$json_str}]$is_add_public_key}" <<<{})
         if [[ $is_test_json ]]; then
-            return 
+            return # tmp test
         fi
+        # only show json, dont save to file.
         if [[ $is_gen ]]; then
             msg
             jq <<<$is_new_json
             msg
             return
         fi
+        # del old file
         if [[ $is_config_file ]]; then
             is_no_del_msg=1
             del $is_config_file
         fi
-        
+        # save json to file
         cat <<<$is_new_json >$is_json_file
-        
         if [[ $is_new_install ]]; then
             create config.json
         fi
+        # caddy auto tls
         if [[ $is_caddy && $host && ! $is_no_auto_tls ]]; then
             create caddy $net
         fi
+        # restart core
         manage restart &
         ;;
     client)
@@ -462,6 +467,7 @@ create() {
     esac
 }
 
+# change config file
 change() {
     is_change=1
     is_dont_show_info=1
@@ -781,6 +787,7 @@ change() {
     esac
 }
 
+# delete config.
 del() {
     is_dont_get_ip=1
     if [[ $is_conf_dir_empty ]]; then
@@ -828,6 +835,7 @@ del() {
     fi
 }
 
+# get config info
 get() {
     case $1 in
     addr)
@@ -1132,22 +1140,15 @@ get() {
     esac
 }
 
+# show info
 info() {
     if [[ ! $is_protocol ]]; then
         get info $1
     fi
     is_color=44
 
-    # 直接使用文件名解析出备注，完美回退，确保 URL 名称不出错
     if [[ -z "$custom_remark" ]]; then
-        # 提取文件名中夹在协议和端口中间的备注部分
-        # 格式为: 协议-备注-端口.json，如 VLESS-REALITY-测试-52380.json
-        local tmp_name="${is_config_name%.json}"
-        local stripped_port="${tmp_name%-[0-9]*}"
-        custom_remark="${stripped_port#*-}"
-        if [[ -z "$custom_remark" || "$custom_remark" == "$is_protocol" ]]; then
-            custom_remark="luopojunzi"
-        fi
+        custom_remark="luopojunzi-$port"
     fi
 
     case $net in
@@ -1254,7 +1255,7 @@ info() {
     fi
     
     if [[ $is_dont_show_info || $is_gen || $is_dont_auto_exit ]]; then
-        return 
+        return
     fi
     
     msg "-------------- $is_config_name -------------"
@@ -1286,6 +1287,9 @@ info() {
     footer_msg
 }
 
+# ==============================================================
+# 功能：一键查看所有节点信息
+# ==============================================================
 show_all_nodes() {
     is_dont_auto_exit=1
     is_show_all=1
@@ -1313,6 +1317,140 @@ show_all_nodes() {
     pause
 }
 
+# footer msg
+footer_msg() {
+    if [[ $is_core_stop && ! $is_new_json ]]; then
+        warn "$is_core_name 当前处于停止状态."
+    fi
+    if [[ $is_caddy_stop && $host ]]; then
+        warn "Caddy 当前处于停止状态."
+    fi
+    
+    msg "------------- END -------------"
+    msg "项目(Github): $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
+    msg
+}
+
+# URL or qrcode
+url_qr() {
+    is_dont_show_info=1
+    info $2
+    if [[ $is_url ]]; then
+        if [[ $1 == 'url' ]]; then
+            msg "\n------------- $is_config_name & URL 链接 -------------"
+            msg "\n\e[${is_color}m${is_url}\e[0m\n"
+            footer_msg
+        else
+            link="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${is_url}"
+            msg "\n------------- $is_config_name & QR code 二维码 -------------"
+            msg
+            if [[ $(type -P qrencode) ]]; then
+                qrencode -t ANSI "${is_url}"
+            else
+                msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
+            fi
+            msg
+            msg "如果终端无法正常显示二维码, 请复制以下链接到浏览器打开生成:"
+            msg "\n\e[4;${is_color}m${link}\e[0m\n"
+            footer_msg
+        fi
+    else
+        if [[ $1 == 'url' ]]; then
+            err "($is_config_name) 无法生成 URL 链接."
+        else
+            err "($is_config_name) 无法生成 QR code 二维码."
+        fi
+    fi
+}
+
+# update core, sh, caddy
+update() {
+    case $1 in
+    1 | core | $is_core)
+        is_update_name=core
+        is_show_name=$is_core_name
+        is_run_ver=v${is_core_ver##* }
+        is_update_repo=$is_core_repo
+        ;;
+    2 | sh)
+        is_update_name=sh
+        is_show_name="$is_core_name 脚本"
+        is_run_ver=$is_sh_ver
+        is_update_repo=$is_sh_repo
+        ;;
+    3 | caddy)
+        if [[ ! $is_caddy ]]; then
+            err "不支持更新 Caddy."
+        fi
+        is_update_name=caddy
+        is_show_name="Caddy"
+        is_run_ver=$is_caddy_ver
+        is_update_repo=$is_caddy_repo
+        ;;
+    *)
+        err "无法识别 ($1), 请使用: $is_core update [core | sh | caddy] [ver]"
+        ;;
+    esac
+    if [[ $2 ]]; then
+        is_new_ver=v${2#v}
+    fi
+    if [[ $is_run_ver == $is_new_ver ]]; then
+        msg "\n自定义版本和当前 $is_show_name 版本一样, 无需更新.\n"
+        exit
+    fi
+    load download.sh
+    if [[ $is_new_ver ]]; then
+        msg "\n使用自定义版本更新 $is_show_name: $(_green $is_new_ver)\n"
+    else
+        get_latest_version $is_update_name
+        if [[ $is_run_ver == $latest_ver ]]; then
+            msg "\n$is_show_name 当前已经是最新版本了.\n"
+            exit
+        fi
+        msg "\n发现 $is_show_name 新版本: $(_green $latest_ver)\n"
+        is_new_ver=$latest_ver
+    fi
+    download $is_update_name $is_new_ver
+    msg "更新成功, 当前 $is_show_name 版本: $(_green $is_new_ver)\n"
+    msg "$(_green 请查看更新说明: https://github.com/$is_update_repo/releases/tag/$is_new_ver)\n"
+    if [[ $is_update_name != 'sh' ]]; then
+        manage restart $is_update_name &
+    fi
+}
+
+# ==============================================================
+# 定时维护任务
+# ==============================================================
+cron_task() {
+    msg "\n------------- 自动维护任务 (Cron) -------------"
+    msg "注意: 日志清理是保持 VPS 稳定运行的必要选项."
+    msg "1. 启用: 自动更新核心 + 自动清空日志 (推荐)"
+    msg "2. 启用: 仅自动清空日志 (手动更新核心)"
+    msg "3. 关闭: 停止所有自动维护任务"
+    msg "4. 退出"
+    ask list is_do_cron null "请选择 [1-4]:"
+    case $REPLY in
+    1)
+        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 3 * * 1 /usr/local/bin/sing-box update core >/dev/null 2>&1"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
+        _green "\n已设置: 每周一自动更新核心，每天自动清空日志！(无人值守模式已开启)\n"
+        ;;
+    2)
+        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
+        _green "\n已设置: 每天凌晨 04:00 自动清空日志释放硬盘空间。\n"
+        ;;
+    3)
+        crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
+        _green "\n已关闭: 所有 Sing-box 相关的定时维护任务\n"
+        ;;
+    4)
+        exit
+        ;;
+    esac
+}
+
+# ==============================================================
+# 添加节点主逻辑 (包含备注强制输入)
+# ==============================================================
 add() {
     unset custom_remark
     is_lower=${1,,}
@@ -1546,7 +1684,6 @@ add() {
         get host-test
     else
         if [[ $is_main_start ]]; then
-
             if [[ ! $port ]]; then
                 get_port
                 port=$tmp_port
@@ -1607,12 +1744,12 @@ add() {
         fi
     fi
 
+    # ==============================================================
+    # 核心交互：添加节点前，强制索要自定义备注
+    # ==============================================================
     echo ""
     echo -e "--------------------------------------------------------"
-    read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi): " custom_remark
-    if [[ -z "$custom_remark" ]]; then
-        custom_remark="luopojunzi"
-    fi
+    read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi-$port): " custom_remark
     echo -e "--------------------------------------------------------"
 
     if [[ $is_install_caddy ]]; then
@@ -1623,6 +1760,7 @@ add() {
     info
 }
 
+# uninstall
 uninstall() {
     if [[ $is_caddy ]]; then
         is_tmp_list=("卸载 $is_core_name" "卸载 ${is_core_name} & Caddy")
@@ -1651,6 +1789,7 @@ uninstall() {
     msg "反馈问题) $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG/issues)\n"
 }
 
+# manage run status
 manage() {
     if [[ $is_dont_auto_exit ]]; then
         return
@@ -1703,6 +1842,7 @@ manage() {
     fi
 }
 
+# main menu
 is_main_menu() {
     is_main_start=1
     while :; do
@@ -1727,23 +1867,19 @@ is_main_menu() {
         echo -e "    \e[92m(7)\e[0m 完全卸载        \e[92m(8)\e[0m 帮助文档\n"
         
         echo -e "  \e[93m◈ 高级工具\e[0m"
-        echo -e "    \e[92m(9)\e[0m 进阶选项       \e[92m(10)\e[0m 关于本脚本"
-        echo -e "    \e[92m(0)\e[0m 退出面板"
+        echo -e "    \e[92m(9)\e[0m 进阶选项 (\e[91m一键查看所有节点\e[0m / BBR / 等)"
+        echo -e "   \e[92m(10)\e[0m 关于本脚本"
         echo -e "\e[90m-----------------------------------------------------\e[0m"
         
-        echo -ne "➡️ 请输入对应的数字进行操作 [\e[91m0-10\e[0m]: "
+        echo -ne "➡️ 请输入对应的数字进行操作 [\e[91m1-10\e[0m]: "
         read REPLY
-        
         if [[ ! $REPLY ]]; then
-            continue
-        fi
-        if [[ "$REPLY" == "0" ]]; then
             exit
         fi
         if [[ "$REPLY" =~ ^([1-9]|10)$ ]]; then
             break
         fi
-        echo -e "\e[31m输入错误, 请输入 0-10 之间的数字\e[0m"
+        echo -e "\e[31m输入错误, 请输入 1-10 之间的数字\e[0m"
         sleep 1
     done
 
@@ -1817,6 +1953,7 @@ is_main_menu() {
     esac
 }
 
+# check prefer args, if not exist prefer args and show main menu
 main() {
     case $1 in
     a | add | gen | no-auto-tls)
