@@ -83,7 +83,12 @@ is_conf_dir=$is_core_dir/conf
 is_log_dir=/var/log/$is_core
 is_sh_bin=/usr/local/bin/$is_core
 is_sh_dir=$is_core_dir/sh
-is_sh_repo=$author/$is_core
+
+# ==================================================================
+# 核心修改：硬编码你的 Github 仓库地址，防止后续更新报错或找错仓库
+# ==================================================================
+is_sh_repo="LuoPoJunZi/Sing-box-LPMG"
+
 is_pkg="wget unzip tar qrencode"
 is_config_json=$is_core_dir/config.json
 is_caddy_bin=/usr/local/bin/caddy
