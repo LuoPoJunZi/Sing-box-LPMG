@@ -32,18 +32,7 @@ ss_method_list=(
     2022-blake3-aes-256-gcm
     2022-blake3-chacha20-poly1305
 )
-mainmenu=(
-    "添加配置"
-    "更改配置"
-    "查看配置"
-    "删除配置"
-    "运行管理"
-    "更新"
-    "卸载"
-    "帮助"
-    "其他"
-    "关于"
-)
+
 info_list=(
     "协议 (protocol)"
     "地址 (address)"
@@ -132,7 +121,7 @@ get_port() {
             err "自动获取可用端口失败次数达到 233 次, 请检查端口占用情况."
         fi
         # ==============================================================
-        # 修改：将随机端口生成范围限制在 20000 - 65535 之间
+        # 随机分配高位端口
         # ==============================================================
         tmp_port=$(shuf -i 20000-65535 -n 1)
         [[ ! $(is_test port_used $tmp_port) && $tmp_port != $port ]] && break
@@ -237,11 +226,6 @@ ask() {
         is_tmp_list=("${is_all_json[@]}")
         is_opt_msg="\n请选择配置:\n"
         is_ask_set=is_config_file
-        ;;
-    mainmenu)
-        is_tmp_list=("${mainmenu[@]}")
-        is_ask_set=is_main_pick
-        is_emtpy_exit=1
         ;;
     esac
     msg $is_opt_msg
@@ -1497,43 +1481,68 @@ update() {
 # 新增功能：定时维护任务 (自动更新与日志清理)
 # ==============================================================
 cron_task() {
-    msg "\n------------- 定时自愈与维护任务 -------------"
-    msg "1. 启用: 每周一凌晨3点 自动更新 Sing-box 核心"
-    msg "2. 启用: 每天凌晨4点 自动清理 Sing-box 日志 (防硬盘占满)"
-    msg "3. 启用: 上述 所有自动任务 (推荐)"
-    msg "4. 关闭: 清理所有相关定时任务"
-    msg "5. 退出"
-    ask list is_do_cron null "请选择 [1-5]:"
+    msg "\n------------- 自动维护任务 (Cron) -------------"
+    msg "注意: 日志清理是保持 VPS 稳定运行的必要选项."
+    msg "1. 启用: 自动更新核心 + 自动清空日志 (推荐)"
+    msg "2. 启用: 仅自动清空日志 (手动更新核心)"
+    msg "3. 关闭: 停止所有自动维护任务"
+    msg "4. 退出"
+    ask list is_do_cron null "请选择 [1-4]:"
     case $REPLY in
     1)
-        (crontab -l 2>/dev/null | grep -v "sing-box update core"; echo "0 3 * * 1 /usr/local/bin/sing-box update core >/dev/null 2>&1") | crontab -
-        _green "\n已设置: 每周一凌晨 03:00 自动检查并更新 Sing-box 核心\n"
+        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 3 * * 1 /usr/local/bin/sing-box update core >/dev/null 2>&1"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
+        _green "\n已设置: 每周一自动更新核心，每天自动清空日志！(无人值守模式已开启)\n"
         ;;
     2)
-        (crontab -l 2>/dev/null | grep -v "/var/log/sing-box"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
-        _green "\n已设置: 每天凌晨 04:00 自动清空日志释放硬盘空间\n"
+        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
+        _green "\n已设置: 每天凌晨 04:00 自动清空日志释放硬盘空间。\n"
         ;;
     3)
-        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 3 * * 1 /usr/local/bin/sing-box update core >/dev/null 2>&1"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
-        _green "\n已设置: 自动更新核心 + 自动清理日志 (无人值守模式已开启)\n"
-        ;;
-    4)
         crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
         _green "\n已关闭: 所有 Sing-box 相关的定时维护任务\n"
         ;;
-    5)
+    4)
         exit
         ;;
     esac
 }
 
-# main menu; if no prefer args.
+# ==============================================================
+# 新增功能：现代面板风 TUI 菜单
+# ==============================================================
 is_main_menu() {
-    msg "\n------------- $is_core_name script $is_sh_ver by $author -------------"
-    msg "$is_core_name $is_core_ver: $is_core_status"
-    msg "项目地址(Github): $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
     is_main_start=1
-    ask mainmenu
+    while :; do
+        clear
+        echo -e "\e[96m=====================================================\e[0m"
+        echo -e "\e[96m          Sing-box-LPMG 魔改管理面板 $is_sh_ver\e[0m"
+        echo -e "\e[96m=====================================================\e[0m"
+        
+        local caddy_show=""
+        [[ $is_caddy ]] && caddy_show=" | Caddy: ${is_caddy_status}"
+        echo -e "  [状态] Core: ${is_core_ver} (${is_core_status})${caddy_show}"
+        echo -e "\e[90m-----------------------------------------------------\e[0m"
+        
+        echo -e "  \e[93m◈ 节点管理\e[0m"
+        echo -e "    \e[92m(1)\e[0m 添加配置        \e[92m(2)\e[0m 更改配置"
+        echo -e "    \e[92m(3)\e[0m 查看配置        \e[92m(4)\e[0m 删除配置\n"
+        
+        echo -e "  \e[93m◈ 系统控制\e[0m"
+        echo -e "    \e[92m(5)\e[0m 启动/停止       \e[92m(6)\e[0m 自动更新/清理"
+        echo -e "    \e[92m(7)\e[0m 完全卸载        \e[92m(8)\e[0m 帮助文档\n"
+        
+        echo -e "  \e[93m◈ 高级工具\e[0m"
+        echo -e "    \e[92m(9)\e[0m 进阶选项 (BBR/手动更新/等)  \e[92m(10)\e[0m 关于本脚本"
+        echo -e "\e[90m-----------------------------------------------------\e[0m"
+        
+        echo -ne "➡️ 请输入对应的数字进行操作 [\e[91m1-10\e[0m]: "
+        read REPLY
+        [[ ! $REPLY ]] && exit
+        [[ "$REPLY" =~ ^([1-9]|10)$ ]] && break
+        echo -e "\e[31m输入错误, 请输入 1-10 之间的数字\e[0m"
+        sleep 1
+    done
+
     case $REPLY in
     1)
         add
@@ -1553,10 +1562,7 @@ is_main_menu() {
         msg "\n管理状态执行: $(_green $is_do_manage)\n"
         ;;
     6)
-        is_tmp_list=("更新$is_core_name" "更新脚本")
-        [[ $is_caddy ]] && is_tmp_list+=("更新Caddy")
-        ask list is_do_update null "\n请选择更新:\n"
-        update $REPLY
+        cron_task
         ;;
     7)
         uninstall
@@ -1567,7 +1573,7 @@ is_main_menu() {
         show_help
         ;;
     9)
-        ask list is_do_other "启用BBR 查看日志 测试运行 重装脚本 设置DNS 定时维护"
+        ask list is_do_other "启用BBR 查看日志 测试运行 重装脚本 设置DNS 手动更新"
         case $REPLY in
         1)
             load bbr.sh
@@ -1588,7 +1594,10 @@ is_main_menu() {
             dns_set
             ;;
         6)
-            cron_task
+            is_tmp_list=("更新$is_core_name" "更新脚本")
+            [[ $is_caddy ]] && is_tmp_list+=("更新Caddy")
+            ask list is_do_update null "\n请选择手动更新:\n"
+            update $REPLY
             ;;
         esac
         ;;
