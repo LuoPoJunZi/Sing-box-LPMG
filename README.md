@@ -3,6 +3,9 @@
 ```bash
 bash <(curl -s -L https://raw.githubusercontent.com/LuoPoJunZi/Sing-box-LPMG/main/install.sh)
 ```
+```bash
+bash <(curl -s -L https://github.com/LuoPoJunZi/Sing-box-LPMG/raw/main/install.sh)
+```
 ## `233boy`大佬的sing-box
 ```bash
 bash <(wget -qO- -o- https://github.com/233boy/sing-box/raw/main/install.sh)
