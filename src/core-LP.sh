@@ -1493,40 +1493,6 @@ update() {
     [[ $is_update_name != 'sh' ]] && manage restart $is_update_name &
 }
 
-# ==============================================================
-# 新增功能：定时维护任务 (自动更新与日志清理)
-# ==============================================================
-cron_task() {
-    msg "\n------------- 定时自愈与维护任务 -------------"
-    msg "1. 启用: 每周一凌晨3点 自动更新 Sing-box 核心"
-    msg "2. 启用: 每天凌晨4点 自动清理 Sing-box 日志 (防硬盘占满)"
-    msg "3. 启用: 上述 所有自动任务 (推荐)"
-    msg "4. 关闭: 清理所有相关定时任务"
-    msg "5. 退出"
-    ask list is_do_cron null "请选择 [1-5]:"
-    case $REPLY in
-    1)
-        (crontab -l 2>/dev/null | grep -v "sing-box update core"; echo "0 3 * * 1 /usr/local/bin/sing-box update core >/dev/null 2>&1") | crontab -
-        _green "\n已设置: 每周一凌晨 03:00 自动检查并更新 Sing-box 核心\n"
-        ;;
-    2)
-        (crontab -l 2>/dev/null | grep -v "/var/log/sing-box"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
-        _green "\n已设置: 每天凌晨 04:00 自动清空日志释放硬盘空间\n"
-        ;;
-    3)
-        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 3 * * 1 /usr/local/bin/sing-box update core >/dev/null 2>&1"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
-        _green "\n已设置: 自动更新核心 + 自动清理日志 (无人值守模式已开启)\n"
-        ;;
-    4)
-        crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
-        _green "\n已关闭: 所有 Sing-box 相关的定时维护任务\n"
-        ;;
-    5)
-        exit
-        ;;
-    esac
-}
-
 # main menu; if no prefer args.
 is_main_menu() {
     msg "\n------------- $is_core_name script $is_sh_ver by $author -------------"
@@ -1567,7 +1533,7 @@ is_main_menu() {
         show_help
         ;;
     9)
-        ask list is_do_other "启用BBR 查看日志 测试运行 重装脚本 设置DNS 定时维护"
+        ask list is_do_other "启用BBR 查看日志 测试运行 重装脚本 设置DNS"
         case $REPLY in
         1)
             load bbr.sh
@@ -1586,9 +1552,6 @@ is_main_menu() {
         5)
             load dns.sh
             dns_set
-            ;;
-        6)
-            cron_task
             ;;
         esac
         ;;
@@ -1663,9 +1626,6 @@ main() {
     dns)
         load dns.sh
         dns_set ${@:2}
-        ;;
-    cron)
-        cron_task
         ;;
     debug)
         is_debug=1
