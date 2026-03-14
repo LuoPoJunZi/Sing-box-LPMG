@@ -114,7 +114,7 @@ get_ip() {
 }
 
 # ==============================================================
-# 新增功能：智能防火墙放行
+# 新增功能：智能防火墙放行 (已修复语法错误)
 # ==============================================================
 firewall_allow() {
     local target_port=$1
@@ -134,8 +134,10 @@ firewall_allow() {
         iptables -I INPUT -p udp --dport ${target_port} -j ACCEPT >/dev/null 2>&1
         # CentOS iptables save
         [[ -f /etc/sysconfig/iptables ]] && service iptables save >/dev/null 2>&1
-        # Ubuntu/Debian iptables save
-        [[ command -v netfilter-persistent >/dev/null 2>&1 ]] && netfilter-persistent save >/dev/null 2>&1
+        # Ubuntu/Debian iptables save (修复了此处的语法)
+        if command -v netfilter-persistent >/dev/null 2>&1; then
+            netfilter-persistent save >/dev/null 2>&1
+        fi
         msg "✅ 防火墙 (Iptables): 已尝试放行端口 ${target_port}"
     fi
 }
