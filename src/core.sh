@@ -241,7 +241,7 @@ ask() {
         echo -e "                 请选择要添加的协议"
         echo -e "\e[96m=====================================================\e[0m"
         echo -e "  \e[93m[ 基础协议 ]\e[0m"
-        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan      \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
+        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan       \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
         echo -e "  \e[92m(5)\e[0m VMess-TCP   \e[92m(6)\e[0m VMess-HTTP   \e[92m(7)\e[0m VMess-QUIC  \e[92m(8)\e[0m Shadowsocks"
         echo -e "  \e[92m(20)\e[0m Socks\n"
         echo -e "  \e[93m[ TLS 隧道 ]\e[0m"
