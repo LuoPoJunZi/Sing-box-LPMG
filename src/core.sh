@@ -131,7 +131,10 @@ get_port() {
         if [[ $is_count -ge 233 ]]; then
             err "自动获取可用端口失败次数达到 233 次, 请检查端口占用情况."
         fi
-        tmp_port=$(shuf -i 445-65535 -n 1)
+        # ==============================================================
+        # 修改：将随机端口生成范围限制在 20000 - 65535 之间
+        # ==============================================================
+        tmp_port=$(shuf -i 20000-65535 -n 1)
         [[ ! $(is_test port_used $tmp_port) && $tmp_port != $port ]] && break
     done
 }
@@ -147,13 +150,6 @@ show_list() {
     COLUMNS=1
     select i in "$@"; do echo; done &
     wait
-    # i=0
-    # for v in "$@"; do
-    #     ((i++))
-    #     echo "$i) $v"
-    # done
-    # echo
-
 }
 
 is_test() {
@@ -179,7 +175,6 @@ is_test() {
         echo $2 | grep -E -i '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
         ;;
     esac
-
 }
 
 is_port_used() {
@@ -257,9 +252,6 @@ ask() {
         read REPLY
         [[ ! $REPLY && $is_emtpy_exit ]] && exit
         [[ ! $REPLY && $is_default_arg ]] && export $is_ask_set=$is_default_arg && break
-        [[ "$REPLY" == "${is_str}2${is_get}3${is_opt}3" && $is_ask_set == 'is_main_pick' ]] && {
-            msg "\n${is_get}2${is_str}3${is_msg}3b${is_tmp}o${is_opt}y\n" && exit
-        }
         if [[ ! $is_tmp_list ]]; then
             [[ $(grep port <<<$is_ask_set) ]] && {
                 [[ ! $(is_test port "$REPLY") ]] && {
@@ -601,9 +593,6 @@ change() {
         [[ $is_auto ]] && is_new_servername=$is_random_servername
         [[ ! $is_new_servername ]] && ask string is_new_servername "请输入新的 serverName:"
         is_servername=$is_new_servername
-        [[ $(grep -i "^233boy.com$" <<<$is_servername) ]] && {
-            err "你干嘛～哎呦～"
-        }
         add $net
         ;;
     11)
@@ -615,13 +604,9 @@ change() {
         [[ ! -f $is_caddy_conf/${host}.conf.add ]] && err "无法配置伪装网站."
         [[ ! $is_new_proxy_site ]] && ask string is_new_proxy_site "请输入新的伪装网站 (例如 example.com):"
         proxy_site=$(sed 's#^.*//##;s#/$##' <<<$is_new_proxy_site)
-        [[ $(grep -i "^233boy.com$" <<<$proxy_site) ]] && {
-            err "你干嘛～哎呦～"
-        } || {
-            load caddy.sh
-            caddy_config proxy
-            manage restart caddy &
-        }
+        load caddy.sh
+        caddy_config proxy
+        manage restart caddy &
         msg "\n已更新伪装网站为: $(_green $proxy_site) \n"
         ;;
     12)
@@ -690,7 +675,7 @@ uninstall() {
     [[ $is_install_sh ]] && return # reinstall
     _green "\n卸载完成!"
     msg "脚本哪里需要完善? 请反馈"
-    msg "反馈问题) $(msg_ul https://github.com/${is_sh_repo}/issues)\n"
+    msg "反馈问题) $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG/issues)\n"
 }
 
 # manage run status
@@ -935,7 +920,7 @@ add() {
                 get_port
                 is_https_port=$tmp_port
                 warn "端口 (80 或 443) 已经被占用, 你也可以考虑使用 no-auto-tls"
-                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://233boy.com/$is_core/no-auto-tls/)\n"
+                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)\n"
                 msg "\n Caddy 将使用非标准端口实现自动配置 TLS, HTTP:$is_http_port HTTPS:$is_https_port\n"
                 msg "请确定是否继续???"
                 pause
@@ -950,8 +935,18 @@ add() {
         # for main menu start, dont auto create args
         if [[ $is_main_start ]]; then
 
-            # set port
-            [[ ! $port ]] && ask string port "请输入端口:"
+            # ==============================================================
+            # 新增功能：自动分配 20000 以上的随机可用端口，不再询问用户
+            # ==============================================================
+            if [[ ! $port ]]; then
+                get_port
+                port=$tmp_port
+                echo ""
+                echo -e "--------------------------------------------------------"
+                echo -e "端口分配: 已自动为您分配空闲端口 [\e[92m$port\e[0m]"
+                echo -e "--------------------------------------------------------"
+            fi
+            # ==============================================================
 
             case ${is_new_protocol,,} in
             socks)
@@ -1033,7 +1028,6 @@ get() {
     file)
         is_file_str=$2
         [[ ! $is_file_str ]] && is_file_str='.json$'
-        # is_all_json=("$(ls $is_conf_dir | grep -E $is_file_str)")
         readarray -t is_all_json <<<"$(ls $is_conf_dir | grep -E -i "$is_file_str" | sed '/dynamic-port-.*-link/d' | head -233)" # limit max 233 lines for show.
         [[ ! $is_all_json ]] && err "无法找到相关的配置文件: $2"
         [[ ${#is_all_json[@]} -eq 1 ]] && is_config_file=$is_all_json && is_auto_get_config=1
@@ -1135,7 +1129,7 @@ get() {
         socks*)
             net=socks
             is_protocol=$net
-            [[ ! $is_socks_user ]] && is_socks_user=233boy
+            [[ ! $is_socks_user ]] && is_socks_user=luopojunzi
             [[ ! $is_socks_pass ]] && is_socks_pass=$uuid
             json_str="users:[{username: \"$is_socks_user\", password: \"$is_socks_pass\"}]"
             ;;
@@ -1206,9 +1200,6 @@ get() {
         fi
         ;;
     ping)
-        # is_ip_type="-4"
-        # [[ $(grep ":" <<<$ip) ]] && is_ip_type="-6"
-        # is_host_dns=$(ping $host $is_ip_type -c 1 -W 2 | head -1)
         is_dns_type="a"
         [[ $(grep ":" <<<$ip) ]] && is_dns_type="aaaa"
         is_host_dns=$(_wget -qO- --header="accept: application/dns-json" "https://one.one.one.one/dns-query?name=$host&type=$is_dns_type")
@@ -1269,7 +1260,6 @@ info() {
     if [[ ! $is_protocol ]]; then
         get info $1
     fi
-    # is_color=$(shuf -i 41-45 -n1)
     is_color=44
 
     # ==============================================================
@@ -1301,7 +1291,6 @@ info() {
             } || {
                 [[ $is_protocol == "trojan" ]] && {
                     uuid=$password
-                    # is_info_str=($is_protocol $is_addr $is_https_port $password $net $host $path 'tls')
                     is_can_change=(0 1 2 3 4)
                     is_info_show=(0 1 2 10 4 6 7 8)
                 }
@@ -1325,7 +1314,7 @@ info() {
                 is_insecure=1
                 is_info_show+=(8 9 20)
                 is_info_str+=(tls h3 true)
-                is_quic_add=",tls:\"tls\",alpn:\"h3\"" # cant add allowInsecure
+                is_quic_add=",tls:\"tls\",alpn:\"h3\""
             }
             is_vmess_url=$(jq -c "{v:2,ps:\"$custom_remark\",add:\"$is_addr\",port:\"$port\",id:\"$uuid\",aid:\"0\",net:\"$net\",type:\"$is_type\"$is_quic_add}" <<<{})
             is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
@@ -1395,7 +1384,7 @@ info() {
         msg "$a $tt= \e[${is_color}m${is_info_str[$i]}\e[0m"
     done
     if [[ $is_new_install ]]; then
-        warn "首次安装请查看脚本帮助文档: $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
+        warn "首次安装请查看项目文档: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
     fi
     if [[ $is_url ]]; then
         msg "------------- ${info_list[12]} -------------"
@@ -1408,7 +1397,7 @@ info() {
         msg "------------- no-auto-tls INFO -------------"
         msg "端口(port): $port"
         msg "路径(path): $path"
-        msg "\e[41m帮助(help)\e[0m: $(msg_ul https://233boy.com/$is_core/no-auto-tls/)"
+        msg "\e[41m帮助(help)\e[0m: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
     fi
     footer_msg
 }
@@ -1417,13 +1406,10 @@ info() {
 footer_msg() {
     [[ $is_core_stop && ! $is_new_json ]] && warn "$is_core_name 当前处于停止状态."
     [[ $is_caddy_stop && $host ]] && warn "Caddy 当前处于停止状态."
-    ####### 要点13脸吗只会改我链接的小人 #######
-    unset c n m s b
+    
     msg "------------- END -------------"
-    msg "关注(tg): $(msg_ul https://t.me/tg2333)"
-    msg "文档(doc): $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
-    msg "推广(ads): 机场推荐($is_core_name services): $(msg_ul https://g${c}e${n}t${m}j${s}m${b}s.com/)\n"
-    ####### 要点13脸吗只会改我链接的小人 #######
+    msg "项目(Github): $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
+    msg
 }
 
 # URL or qrcode
@@ -1436,7 +1422,7 @@ url_qr() {
             msg "\n\e[${is_color}m${is_url}\e[0m\n"
             footer_msg
         } || {
-            link="https://233boy.github.io/tools/qr.html#${is_url}"
+            link="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${is_url}"
             msg "\n------------- $is_config_name & QR code 二维码 -------------"
             msg
             if [[ $(type -P qrencode) ]]; then
@@ -1445,7 +1431,7 @@ url_qr() {
                 msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
             fi
             msg
-            msg "如果无法正常显示或识别, 请使用下面的链接来生成二维码:"
+            msg "如果终端无法正常显示二维码, 请复制以下链接到浏览器打开生成:"
             msg "\n\e[4;${is_color}m${link}\e[0m\n"
             footer_msg
         }
@@ -1511,7 +1497,7 @@ update() {
 is_main_menu() {
     msg "\n------------- $is_core_name script $is_sh_ver by $author -------------"
     msg "$is_core_name $is_core_ver: $is_core_status"
-    msg "群组(Chat): $(msg_ul https://t.me/tg233boy)"
+    msg "项目地址(Github): $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
     is_main_start=1
     ask mainmenu
     case $REPLY in
@@ -1600,9 +1586,6 @@ main() {
     c | config | change)
         change ${@:2}
         ;;
-    # client | genc)
-    #     create client $2
-    #     ;;
     d | del | rm)
         del $2
         ;;
