@@ -108,12 +108,16 @@ get_uuid() {
 }
 
 get_ip() {
-    [[ $ip || $is_no_auto_tls || $is_gen || $is_dont_get_ip ]] && return
+    if [[ $ip || $is_no_auto_tls || $is_gen || $is_dont_get_ip ]]; then
+        return
+    fi
     export "$(_wget -4 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
-    [[ ! $ip ]] && export "$(_wget -6 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
-    [[ ! $ip ]] && {
+    if [[ ! $ip ]]; then
+        export "$(_wget -6 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
+    fi
+    if [[ ! $ip ]]; then
         err "获取服务器 IP 失败.."
-    }
+    fi
 }
 
 # ==============================================================
@@ -121,7 +125,9 @@ get_ip() {
 # ==============================================================
 firewall_allow() {
     local target_port=$1
-    [[ -z "$target_port" ]] && return
+    if [[ -z "$target_port" ]]; then
+        return
+    fi
     
     if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
         ufw allow ${target_port}/tcp >/dev/null 2>&1
@@ -156,7 +162,9 @@ get_port() {
         fi
         # 随机分配高位端口
         tmp_port=$(shuf -i 20000-65535 -n 1)
-        [[ ! $(is_test port_used $tmp_port) && $tmp_port != $port ]] && break
+        if [[ ! $(is_test port_used $tmp_port) && $tmp_port != $port ]]; then
+            break
+        fi
     done
     
     # 拿到端口后，自动尝试放行防火墙
@@ -185,11 +193,15 @@ is_test() {
         ;;
     port)
         if [[ $(is_test number $2) ]]; then
-            [[ $2 -le 65535 ]] && echo ok
+            if [[ $2 -le 65535 ]]; then
+                echo ok
+            fi
         fi
         ;;
     port_used)
-        [[ $(is_port_used $2) && ! $is_cant_test_port ]] && echo ok
+        if [[ $(is_port_used $2) && ! $is_cant_test_port ]]; then
+            echo ok
+        fi
         ;;
     domain)
         echo $2 | grep -E -i '^\w(\w|\-|\.)?+\.\w+$'
@@ -205,12 +217,16 @@ is_test() {
 
 is_port_used() {
     if [[ $(type -P netstat) ]]; then
-        [[ ! $is_used_port ]] && is_used_port="$(netstat -tunlp | sed -n 's/.*:\([0-9]\+\).*/\1/p' | sort -nu)"
+        if [[ ! $is_used_port ]]; then
+            is_used_port="$(netstat -tunlp | sed -n 's/.*:\([0-9]\+\).*/\1/p' | sort -nu)"
+        fi
         echo $is_used_port | sed 's/ /\n/g' | grep ^${1}$
         return
     fi
     if [[ $(type -P ss) ]]; then
-        [[ ! $is_used_port ]] && is_used_port="$(ss -tunlp | sed -n 's/.*:\([0-9]\+\).*/\1/p' | sort -nu)"
+        if [[ ! $is_used_port ]]; then
+            is_used_port="$(ss -tunlp | sed -n 's/.*:\([0-9]\+\).*/\1/p' | sort -nu)"
+        fi
         echo $is_used_port | sed 's/ /\n/g' | grep ^${1}$
         return
     fi
@@ -543,9 +559,7 @@ change() {
     if [[ $3 == 'auto' ]]; then
         is_auto=1
     fi
-    # if is_dont_show_info exist, cant show info.
     is_dont_show_info=
-    # if not prefer args, show change list and then get change id.
     if [[ ! $is_change_id ]]; then
         ask set_change_list
         is_change_id=${is_can_change[$REPLY - 1]}
@@ -556,12 +570,10 @@ change() {
         add $net ${@:3}
         ;;
     0)
-        # new protocol
         is_set_new_protocol=1
         add ${@:3}
         ;;
     1)
-        # new port
         is_new_port=$3
         if [[ $host && ! $is_caddy || $is_no_auto_tls ]]; then
             err "($is_config_file) 不支持更改端口, 因为没啥意义."
@@ -593,7 +605,6 @@ change() {
         fi
         ;;
     2)
-        # new host
         is_new_host=$3
         if [[ ! $host ]]; then
             err "($is_config_file) 不支持更改域名."
@@ -601,11 +612,10 @@ change() {
         if [[ ! $is_new_host ]]; then
             ask string is_new_host "请输入新域名:"
         fi
-        old_host=$host # del old host
+        old_host=$host
         add $net $is_new_host
         ;;
     3)
-        # new path
         is_new_path=$3
         if [[ ! $path ]]; then
             err "($is_config_file) 不支持更改路径."
@@ -620,7 +630,6 @@ change() {
         add $net auto auto $is_new_path
         ;;
     4)
-        # new password
         is_new_pass=$3
         if [[ $ss_password || $password ]]; then
             if [[ $is_auto ]]; then
@@ -642,7 +651,6 @@ change() {
         add $net
         ;;
     5)
-        # new uuid
         is_new_uuid=$3
         if [[ ! $uuid ]]; then
             err "($is_config_file) 不支持更改 UUID."
@@ -657,7 +665,6 @@ change() {
         add $net auto $is_new_uuid
         ;;
     6)
-        # new method
         is_new_method=$3
         if [[ $net != 'ss' ]]; then
             err "($is_config_file) 不支持更改加密方式."
@@ -672,7 +679,6 @@ change() {
         add $net auto auto $is_new_method
         ;;
     7)
-        # new remote addr
         is_new_door_addr=$3
         if [[ $net != 'direct' ]]; then
             err "($is_config_file) 不支持更改目标地址."
@@ -684,7 +690,6 @@ change() {
         add $net
         ;;
     8)
-        # new remote port
         is_new_door_port=$3
         if [[ $net != 'direct' ]]; then
             err "($is_config_file) 不支持更改目标端口."
@@ -696,7 +701,6 @@ change() {
         add $net auto auto $is_new_door_port
         ;;
     9)
-        # new is_private_key is_public_key
         is_new_private_key=$3
         is_new_public_key=$4
         if [[ ! $is_reality ]]; then
@@ -743,7 +747,6 @@ change() {
         fi
         ;;
     10)
-        # new serverName
         is_new_servername=$3
         if [[ ! $is_reality ]]; then
             err "($is_config_file) 不支持更改 serverName."
@@ -758,7 +761,6 @@ change() {
         add $net
         ;;
     11)
-        # new proxy site
         is_new_proxy_site=$3
         if [[ ! $is_caddy && ! $host ]]; then
             err "($is_config_file) 不支持更改伪装网站."
@@ -776,7 +778,6 @@ change() {
         msg "\n已更新伪装网站为: $(_green $proxy_site) \n"
         ;;
     12)
-        # new socks user
         if [[ ! $is_socks_user ]]; then
             err "($is_config_file) 不支持更改用户名 (Username)."
         fi
@@ -788,12 +789,10 @@ change() {
 
 # delete config.
 del() {
-    # dont get ip
     is_dont_get_ip=1
     if [[ $is_conf_dir_empty ]]; then
-        return # not found any json file.
+        return 
     fi
-    # get a config file
     if [[ ! $is_config_file ]]; then
         get info $1
     fi
@@ -814,7 +813,7 @@ del() {
             is_del_host=$host
             if [[ $is_change ]]; then
                 if [[ ! $old_host ]]; then
-                    return # no host exist or not set new host;
+                    return
                 fi
                 is_del_host=$old_host
             fi
@@ -837,7 +836,6 @@ del() {
 }
 
 # get config info
-# or somes required args
 get() {
     case $1 in
     addr)
@@ -868,7 +866,7 @@ get() {
         if [[ ! $is_file_str ]]; then
             is_file_str='.json$'
         fi
-        readarray -t is_all_json <<<"$(ls $is_conf_dir | grep -E -i "$is_file_str" | sed '/dynamic-port-.*-link/d' | head -233)" # limit max 233 lines for show.
+        readarray -t is_all_json <<<"$(ls $is_conf_dir | grep -E -i "$is_file_str" | sed '/dynamic-port-.*-link/d' | head -233)" 
         if [[ ! $is_all_json ]]; then
             err "无法找到相关的配置文件: $2"
         fi
@@ -935,7 +933,7 @@ get() {
         fi
         ;;
     protocol)
-        get addr # get host or server ip
+        get addr
         is_lower=${2,,}
         net=
         is_users="users:[{uuid:\"$uuid\"}]"
@@ -1014,7 +1012,7 @@ get() {
             ;;
         esac
         if [[ $net ]]; then
-            return # if net exist, dont need more json args
+            return
         fi
         if [[ $host && $is_lower =~ "tls" ]]; then
             if [[ ! $path ]]; then
@@ -1057,13 +1055,10 @@ get() {
                 is_json_add="${is_tls_json/alpn\:\[\"h3\"\],/},$is_json_add"
             fi
             ;;
-        *)
-            err "无法识别传输协议: $is_config_file"
-            ;;
         esac
         json_str="$is_users,$is_json_add"
         ;;
-    host-test) # test host dns record; for auto *tls required.
+    host-test)
         if [[ $is_no_auto_tls || $is_gen || $is_dont_test_host ]]; then
             return
         fi
@@ -1152,7 +1147,6 @@ info() {
     fi
     is_color=44
 
-    # 备注回退机制
     if [[ -z "$custom_remark" ]]; then
         custom_remark="luopojunzi-$port"
     fi
@@ -1253,7 +1247,6 @@ info() {
         ;;
     esac
     
-    # 新增逻辑：如果是“一键查看所有”模式，只打印简略信息和URL
     if [[ $is_show_all ]]; then
         echo -e "\e[93m[${is_config_name}]\e[0m 协议: \e[96m${is_protocol}\e[0m | 端口: \e[92m${port}\e[0m"
         echo -e "\e[4;${is_color}m${is_url}\e[0m"
@@ -1262,7 +1255,7 @@ info() {
     fi
     
     if [[ $is_dont_show_info || $is_gen || $is_dont_auto_exit ]]; then
-        return # dont show info
+        return
     fi
     
     msg "-------------- $is_config_name -------------"
@@ -1295,7 +1288,7 @@ info() {
 }
 
 # ==============================================================
-# 新增功能：一键查看所有节点的简明信息与URL
+# 功能：一键查看所有节点信息
 # ==============================================================
 show_all_nodes() {
     is_dont_auto_exit=1
@@ -1322,339 +1315,6 @@ show_all_nodes() {
     is_show_all=
     is_dont_auto_exit=
     pause
-}
-
-# add a config (包含备注强制输入)
-add() {
-    unset custom_remark
-    is_lower=${1,,}
-    if [[ $is_lower ]]; then
-        case $is_lower in
-        ws | tcp | quic | http)
-            is_new_protocol=VMess-${is_lower^^}
-            ;;
-        wss | h2 | hu | vws | vh2 | vhu | tws | th2 | thu)
-            is_new_protocol=$(sed -E "s/^V/VLESS-/;s/^T/Trojan-/;/^(W|H)/{s/^/VMess-/};s/WSS/WS/;s/HU/HTTPUpgrade/" <<<${is_lower^^})-TLS
-            ;;
-        r | reality)
-            is_new_protocol=VLESS-REALITY
-            ;;
-        rh2)
-            is_new_protocol=VLESS-HTTP2-REALITY
-            ;;
-        ss)
-            is_new_protocol=Shadowsocks
-            ;;
-        door | direct)
-            is_new_protocol=Direct
-            ;;
-        tuic)
-            is_new_protocol=TUIC
-            ;;
-        hy | hy2 | hysteria*)
-            is_new_protocol=Hysteria2
-            ;;
-        trojan)
-            is_new_protocol=Trojan
-            ;;
-        socks)
-            is_new_protocol=Socks
-            ;;
-        *)
-            for v in ${protocol_list[@]}; do
-                if [[ $(grep -E -i "^$is_lower$" <<<$v) ]]; then
-                    is_new_protocol=$v
-                    break
-                fi
-            done
-
-            if [[ ! $is_new_protocol ]]; then
-                err "无法识别 ($1), 请使用: $is_core add [protocol] [args... | auto]"
-            fi
-            ;;
-        esac
-    fi
-
-    # no prefer protocol
-    if [[ ! $is_new_protocol ]]; then
-        ask set_protocol
-    fi
-
-    case ${is_new_protocol,,} in
-    *-tls)
-        is_use_tls=1
-        is_use_host=$2
-        is_use_uuid=$3
-        is_use_path=$4
-        is_add_opts="[host] [uuid] [/path]"
-        ;;
-    vmess* | tuic*)
-        is_use_port=$2
-        is_use_uuid=$3
-        is_add_opts="[port] [uuid]"
-        ;;
-    trojan* | hysteria*)
-        is_use_port=$2
-        is_use_pass=$3
-        is_add_opts="[port] [password]"
-        ;;
-    *reality*)
-        is_reality=1
-        is_use_port=$2
-        is_use_uuid=$3
-        is_use_servername=$4
-        is_add_opts="[port] [uuid] [sni]"
-        ;;
-    shadowsocks)
-        is_use_port=$2
-        is_use_pass=$3
-        is_use_method=$4
-        is_add_opts="[port] [password] [method]"
-        ;;
-    direct)
-        is_use_port=$2
-        is_use_door_addr=$3
-        is_use_door_port=$4
-        is_add_opts="[port] [remote_addr] [remote_port]"
-        ;;
-    socks)
-        is_socks=1
-        is_use_port=$2
-        is_use_socks_user=$3
-        is_use_socks_pass=$4
-        is_add_opts="[port] [username] [password]"
-        ;;
-    esac
-
-    if [[ $1 && ! $is_change ]]; then
-        msg "\n使用协议: $is_new_protocol"
-        # err msg tips
-        is_err_tips="\n\n请使用: $(_green $is_core add $1 $is_add_opts) 来添加 $is_new_protocol 配置"
-    fi
-
-    # remove old protocol args
-    if [[ $is_set_new_protocol ]]; then
-        case $is_old_net in
-        h2 | ws | httpupgrade)
-            old_host=$host
-            if [[ ! $is_use_tls ]]; then
-                unset host is_no_auto_tls
-            fi
-            ;;
-        reality)
-            net_type=
-            if [[ ! $(grep -i reality <<<$is_new_protocol) ]]; then
-                is_reality=
-            fi
-            ;;
-        ss)
-            if [[ $(is_test uuid $ss_password) ]]; then
-                uuid=$ss_password
-            fi
-            ;;
-        esac
-        if [[ ! $(is_test uuid $uuid) ]]; then
-            uuid=
-        fi
-        if [[ $(is_test uuid $password) ]]; then
-            uuid=$password
-        fi
-    fi
-
-    # no-auto-tls only use h2,ws,grpc
-    if [[ $is_no_auto_tls && ! $is_use_tls ]]; then
-        err "$is_new_protocol 不支持手动配置 tls."
-    fi
-
-    # prefer args.
-    if [[ $2 ]]; then
-        for v in is_use_port is_use_uuid is_use_host is_use_path is_use_pass is_use_method is_use_door_addr is_use_door_port; do
-            if [[ ${!v} == 'auto' ]]; then
-                unset $v
-            fi
-        done
-
-        if [[ $is_use_port ]]; then
-            if [[ ! $(is_test port ${is_use_port}) ]]; then
-                err "($is_use_port) 不是一个有效的端口. $is_err_tips"
-            fi
-            if [[ $(is_test port_used $is_use_port) && ! $is_gen ]]; then
-                err "无法使用 ($is_use_port) 端口. $is_err_tips"
-            fi
-            port=$is_use_port
-        fi
-        if [[ $is_use_door_port ]]; then
-            if [[ ! $(is_test port ${is_use_door_port}) ]]; then
-                err "(${is_use_door_port}) 不是一个有效的目标端口. $is_err_tips"
-            fi
-            door_port=$is_use_door_port
-        fi
-        if [[ $is_use_uuid ]]; then
-            if [[ ! $(is_test uuid $is_use_uuid) ]]; then
-                err "($is_use_uuid) 不是一个有效的 UUID. $is_err_tips"
-            fi
-            uuid=$is_use_uuid
-        fi
-        if [[ $is_use_path ]]; then
-            if [[ ! $(is_test path $is_use_path) ]]; then
-                err "($is_use_path) 不是有效的路径. $is_err_tips"
-            fi
-            path=$is_use_path
-        fi
-        if [[ $is_use_method ]]; then
-            is_tmp_use_name=加密方式
-            is_tmp_list=${ss_method_list[@]}
-            for v in ${is_tmp_list[@]}; do
-                if [[ $(grep -E -i "^${is_use_method}$" <<<$v) ]]; then
-                    is_tmp_use_type=$v
-                    break
-                fi
-            done
-            if [[ ! ${is_tmp_use_type} ]]; then
-                warn "(${is_use_method}) 不是一个可用的${is_tmp_use_name}."
-                msg "${is_tmp_use_name}可用如下: "
-                for v in ${is_tmp_list[@]}; do
-                    msg "\t\t$v"
-                done
-                msg "$is_err_tips\n"
-                exit 1
-            fi
-            ss_method=$is_tmp_use_type
-        fi
-        if [[ $is_use_pass ]]; then
-            ss_password=$is_use_pass
-            password=$is_use_pass
-        fi
-        if [[ $is_use_host ]]; then
-            host=$is_use_host
-        fi
-        if [[ $is_use_door_addr ]]; then
-            door_addr=$is_use_door_addr
-        fi
-        if [[ $is_use_servername ]]; then
-            is_servername=$is_use_servername
-        fi
-        if [[ $is_use_socks_user ]]; then
-            is_socks_user=$is_use_socks_user
-        fi
-        if [[ $is_use_socks_pass ]]; then
-            is_socks_pass=$is_use_socks_pass
-        fi
-    fi
-
-    if [[ $is_use_tls ]]; then
-        if [[ ! $is_no_auto_tls && ! $is_caddy && ! $is_gen && ! $is_dont_test_host ]]; then
-            # test auto tls
-            if [[ $(is_test port_used 80) || $(is_test port_used 443) ]]; then
-                get_port
-                is_http_port=$tmp_port
-                get_port
-                is_https_port=$tmp_port
-                warn "端口 (80 或 443) 已经被占用, 你也可以考虑使用 no-auto-tls"
-                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)\n"
-                msg "\n Caddy 将使用非标准端口实现自动配置 TLS, HTTP:$is_http_port HTTPS:$is_https_port\n"
-                msg "请确定是否继续???"
-                pause
-            fi
-            is_install_caddy=1
-        fi
-        # set host
-        if [[ ! $host ]]; then
-            ask string host "请输入域名:"
-        fi
-        # test host dns
-        get host-test
-    else
-        # for main menu start, dont auto create args
-        if [[ $is_main_start ]]; then
-
-            if [[ ! $port ]]; then
-                get_port
-                port=$tmp_port
-                echo ""
-                echo -e "--------------------------------------------------------"
-                echo -e "端口分配: 已自动为您分配空闲端口 [\e[92m$port\e[0m]"
-                echo -e "--------------------------------------------------------"
-            fi
-
-            case ${is_new_protocol,,} in
-            socks)
-                # set user
-                if [[ ! $is_socks_user ]]; then
-                    ask string is_socks_user "请设置用户名:"
-                fi
-                # set password
-                if [[ ! $is_socks_pass ]]; then
-                    ask string is_socks_pass "请设置密码:"
-                fi
-                ;;
-            shadowsocks)
-                # set method
-                if [[ ! $ss_method ]]; then
-                    ask set_ss_method
-                fi
-                # set password
-                if [[ ! $ss_password ]]; then
-                    ask string ss_password "请设置密码:"
-                fi
-                ;;
-            esac
-
-        fi
-    fi
-
-    # Dokodemo-Door
-    if [[ $is_new_protocol == 'Direct' ]]; then
-        # set remote addr
-        if [[ ! $door_addr ]]; then
-            ask string door_addr "请输入目标地址:"
-        fi
-        # set remote port
-        if [[ ! $door_port ]]; then
-            ask string door_port "请输入目标端口:"
-        fi
-    fi
-
-    # Shadowsocks 2022
-    if [[ $(grep 2022 <<<$ss_method) ]]; then
-        # test ss2022 password
-        if [[ $ss_password ]]; then
-            is_test_json=1
-            create server Shadowsocks
-            if [[ ! $tmp_uuid ]]; then
-                get_uuid
-            fi
-            is_test_json_save=$is_conf_dir/tmp-test-$tmp_uuid
-            cat <<<"$is_new_json" >$is_test_json_save
-            $is_core_bin check -c $is_test_json_save &>/dev/null
-            if [[ $? != 0 ]]; then
-                warn "Shadowsocks 协议 ($ss_method) 不支持使用密码 ($(_red_bg $ss_password))\n\n你可以使用命令: $(_green $is_core ss2022) 生成支持的密码.\n\n脚本将自动创建可用密码:)"
-                ss_password=
-                # create new json.
-                json_str=
-            fi
-            is_test_json=
-            rm -f $is_test_json_save
-        fi
-
-    fi
-
-    # 关键交互：获取节点备注 (添加配置专属流程)
-    echo ""
-    echo -e "--------------------------------------------------------"
-    read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi-$port): " custom_remark
-    echo -e "--------------------------------------------------------"
-
-    # install caddy
-    if [[ $is_install_caddy ]]; then
-        get install-caddy
-    fi
-
-    # create json
-    create server $is_new_protocol
-
-    # show config info.
-    info
 }
 
 # footer msg
@@ -1759,7 +1419,7 @@ update() {
 }
 
 # ==============================================================
-# 定时维护任务 (自动更新与日志清理)
+# 定时维护任务
 # ==============================================================
 cron_task() {
     msg "\n------------- 自动维护任务 (Cron) -------------"
@@ -1789,8 +1449,400 @@ cron_task() {
 }
 
 # ==============================================================
-# 现代面板风 TUI 菜单
+# 添加节点主逻辑 (包含备注强制输入)
 # ==============================================================
+add() {
+    unset custom_remark
+    is_lower=${1,,}
+    if [[ $is_lower ]]; then
+        case $is_lower in
+        ws | tcp | quic | http)
+            is_new_protocol=VMess-${is_lower^^}
+            ;;
+        wss | h2 | hu | vws | vh2 | vhu | tws | th2 | thu)
+            is_new_protocol=$(sed -E "s/^V/VLESS-/;s/^T/Trojan-/;/^(W|H)/{s/^/VMess-/};s/WSS/WS/;s/HU/HTTPUpgrade/" <<<${is_lower^^})-TLS
+            ;;
+        r | reality)
+            is_new_protocol=VLESS-REALITY
+            ;;
+        rh2)
+            is_new_protocol=VLESS-HTTP2-REALITY
+            ;;
+        ss)
+            is_new_protocol=Shadowsocks
+            ;;
+        door | direct)
+            is_new_protocol=Direct
+            ;;
+        tuic)
+            is_new_protocol=TUIC
+            ;;
+        hy | hy2 | hysteria*)
+            is_new_protocol=Hysteria2
+            ;;
+        trojan)
+            is_new_protocol=Trojan
+            ;;
+        socks)
+            is_new_protocol=Socks
+            ;;
+        *)
+            for v in ${protocol_list[@]}; do
+                if [[ $(grep -E -i "^$is_lower$" <<<$v) ]]; then
+                    is_new_protocol=$v
+                    break
+                fi
+            done
+
+            if [[ ! $is_new_protocol ]]; then
+                err "无法识别 ($1), 请使用: $is_core add [protocol] [args... | auto]"
+            fi
+            ;;
+        esac
+    fi
+
+    if [[ ! $is_new_protocol ]]; then
+        ask set_protocol
+    fi
+
+    case ${is_new_protocol,,} in
+    *-tls)
+        is_use_tls=1
+        is_use_host=$2
+        is_use_uuid=$3
+        is_use_path=$4
+        is_add_opts="[host] [uuid] [/path]"
+        ;;
+    vmess* | tuic*)
+        is_use_port=$2
+        is_use_uuid=$3
+        is_add_opts="[port] [uuid]"
+        ;;
+    trojan* | hysteria*)
+        is_use_port=$2
+        is_use_pass=$3
+        is_add_opts="[port] [password]"
+        ;;
+    *reality*)
+        is_reality=1
+        is_use_port=$2
+        is_use_uuid=$3
+        is_use_servername=$4
+        is_add_opts="[port] [uuid] [sni]"
+        ;;
+    shadowsocks)
+        is_use_port=$2
+        is_use_pass=$3
+        is_use_method=$4
+        is_add_opts="[port] [password] [method]"
+        ;;
+    direct)
+        is_use_port=$2
+        is_use_door_addr=$3
+        is_use_door_port=$4
+        is_add_opts="[port] [remote_addr] [remote_port]"
+        ;;
+    socks)
+        is_socks=1
+        is_use_port=$2
+        is_use_socks_user=$3
+        is_use_socks_pass=$4
+        is_add_opts="[port] [username] [password]"
+        ;;
+    esac
+
+    if [[ $1 && ! $is_change ]]; then
+        msg "\n使用协议: $is_new_protocol"
+        is_err_tips="\n\n请使用: $(_green $is_core add $1 $is_add_opts) 来添加 $is_new_protocol 配置"
+    fi
+
+    if [[ $is_set_new_protocol ]]; then
+        case $is_old_net in
+        h2 | ws | httpupgrade)
+            old_host=$host
+            if [[ ! $is_use_tls ]]; then
+                unset host is_no_auto_tls
+            fi
+            ;;
+        reality)
+            net_type=
+            if [[ ! $(grep -i reality <<<$is_new_protocol) ]]; then
+                is_reality=
+            fi
+            ;;
+        ss)
+            if [[ $(is_test uuid $ss_password) ]]; then
+                uuid=$ss_password
+            fi
+            ;;
+        esac
+        if [[ ! $(is_test uuid $uuid) ]]; then
+            uuid=
+        fi
+        if [[ $(is_test uuid $password) ]]; then
+            uuid=$password
+        fi
+    fi
+
+    if [[ $is_no_auto_tls && ! $is_use_tls ]]; then
+        err "$is_new_protocol 不支持手动配置 tls."
+    fi
+
+    if [[ $2 ]]; then
+        for v in is_use_port is_use_uuid is_use_host is_use_path is_use_pass is_use_method is_use_door_addr is_use_door_port; do
+            if [[ ${!v} == 'auto' ]]; then
+                unset $v
+            fi
+        done
+
+        if [[ $is_use_port ]]; then
+            if [[ ! $(is_test port ${is_use_port}) ]]; then
+                err "($is_use_port) 不是一个有效的端口. $is_err_tips"
+            fi
+            if [[ $(is_test port_used $is_use_port) && ! $is_gen ]]; then
+                err "无法使用 ($is_use_port) 端口. $is_err_tips"
+            fi
+            port=$is_use_port
+        fi
+        if [[ $is_use_door_port ]]; then
+            if [[ ! $(is_test port ${is_use_door_port}) ]]; then
+                err "(${is_use_door_port}) 不是一个有效的目标端口. $is_err_tips"
+            fi
+            door_port=$is_use_door_port
+        fi
+        if [[ $is_use_uuid ]]; then
+            if [[ ! $(is_test uuid $is_use_uuid) ]]; then
+                err "($is_use_uuid) 不是一个有效的 UUID. $is_err_tips"
+            fi
+            uuid=$is_use_uuid
+        fi
+        if [[ $is_use_path ]]; then
+            if [[ ! $(is_test path $is_use_path) ]]; then
+                err "($is_use_path) 不是有效的路径. $is_err_tips"
+            fi
+            path=$is_use_path
+        fi
+        if [[ $is_use_method ]]; then
+            is_tmp_use_name=加密方式
+            is_tmp_list=${ss_method_list[@]}
+            for v in ${is_tmp_list[@]}; do
+                if [[ $(grep -E -i "^${is_use_method}$" <<<$v) ]]; then
+                    is_tmp_use_type=$v
+                    break
+                fi
+            done
+            if [[ ! ${is_tmp_use_type} ]]; then
+                warn "(${is_use_method}) 不是一个可用的${is_tmp_use_name}."
+                msg "${is_tmp_use_name}可用如下: "
+                for v in ${is_tmp_list[@]}; do
+                    msg "\t\t$v"
+                done
+                msg "$is_err_tips\n"
+                exit 1
+            fi
+            ss_method=$is_tmp_use_type
+        fi
+        if [[ $is_use_pass ]]; then
+            ss_password=$is_use_pass
+            password=$is_use_pass
+        fi
+        if [[ $is_use_host ]]; then
+            host=$is_use_host
+        fi
+        if [[ $is_use_door_addr ]]; then
+            door_addr=$is_use_door_addr
+        fi
+        if [[ $is_use_servername ]]; then
+            is_servername=$is_use_servername
+        fi
+        if [[ $is_use_socks_user ]]; then
+            is_socks_user=$is_use_socks_user
+        fi
+        if [[ $is_use_socks_pass ]]; then
+            is_socks_pass=$is_use_socks_pass
+        fi
+    fi
+
+    if [[ $is_use_tls ]]; then
+        if [[ ! $is_no_auto_tls && ! $is_caddy && ! $is_gen && ! $is_dont_test_host ]]; then
+            if [[ $(is_test port_used 80) || $(is_test port_used 443) ]]; then
+                get_port
+                is_http_port=$tmp_port
+                get_port
+                is_https_port=$tmp_port
+                warn "端口 (80 或 443) 已经被占用, 你也可以考虑使用 no-auto-tls"
+                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)\n"
+                msg "\n Caddy 将使用非标准端口实现自动配置 TLS, HTTP:$is_http_port HTTPS:$is_https_port\n"
+                msg "请确定是否继续???"
+                pause
+            fi
+            is_install_caddy=1
+        fi
+        if [[ ! $host ]]; then
+            ask string host "请输入域名:"
+        fi
+        get host-test
+    else
+        if [[ $is_main_start ]]; then
+            if [[ ! $port ]]; then
+                get_port
+                port=$tmp_port
+                echo ""
+                echo -e "--------------------------------------------------------"
+                echo -e "端口分配: 已自动为您分配空闲端口 [\e[92m$port\e[0m]"
+                echo -e "--------------------------------------------------------"
+            fi
+
+            case ${is_new_protocol,,} in
+            socks)
+                if [[ ! $is_socks_user ]]; then
+                    ask string is_socks_user "请设置用户名:"
+                fi
+                if [[ ! $is_socks_pass ]]; then
+                    ask string is_socks_pass "请设置密码:"
+                fi
+                ;;
+            shadowsocks)
+                if [[ ! $ss_method ]]; then
+                    ask set_ss_method
+                fi
+                if [[ ! $ss_password ]]; then
+                    ask string ss_password "请设置密码:"
+                fi
+                ;;
+            esac
+
+        fi
+    fi
+
+    if [[ $is_new_protocol == 'Direct' ]]; then
+        if [[ ! $door_addr ]]; then
+            ask string door_addr "请输入目标地址:"
+        fi
+        if [[ ! $door_port ]]; then
+            ask string door_port "请输入目标端口:"
+        fi
+    fi
+
+    if [[ $(grep 2022 <<<$ss_method) ]]; then
+        if [[ $ss_password ]]; then
+            is_test_json=1
+            create server Shadowsocks
+            if [[ ! $tmp_uuid ]]; then
+                get_uuid
+            fi
+            is_test_json_save=$is_conf_dir/tmp-test-$tmp_uuid
+            cat <<<"$is_new_json" >$is_test_json_save
+            $is_core_bin check -c $is_test_json_save &>/dev/null
+            if [[ $? != 0 ]]; then
+                warn "Shadowsocks 协议 ($ss_method) 不支持使用密码 ($(_red_bg $ss_password))\n\n你可以使用命令: $(_green $is_core ss2022) 生成支持的密码.\n\n脚本将自动创建可用密码:)"
+                ss_password=
+                json_str=
+            fi
+            is_test_json=
+            rm -f $is_test_json_save
+        fi
+    fi
+
+    # ==============================================================
+    # 核心交互：添加节点前，强制索要自定义备注
+    # ==============================================================
+    echo ""
+    echo -e "--------------------------------------------------------"
+    read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi-$port): " custom_remark
+    echo -e "--------------------------------------------------------"
+
+    if [[ $is_install_caddy ]]; then
+        get install-caddy
+    fi
+
+    create server $is_new_protocol
+    info
+}
+
+# uninstall
+uninstall() {
+    if [[ $is_caddy ]]; then
+        is_tmp_list=("卸载 $is_core_name" "卸载 ${is_core_name} & Caddy")
+        ask list is_do_uninstall
+    else
+        ask string y "是否卸载 ${is_core_name}? [y]:"
+    fi
+    manage stop &>/dev/null
+    manage disable &>/dev/null
+    
+    crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
+
+    rm -rf $is_core_dir $is_log_dir $is_sh_bin ${is_sh_bin/$is_core/sb} /lib/systemd/system/$is_core.service
+    sed -i "/$is_core/d" /root/.bashrc
+    
+    if [[ $REPLY == '2' ]]; then
+        manage stop caddy &>/dev/null
+        manage disable caddy &>/dev/null
+        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service
+    fi
+    if [[ $is_install_sh ]]; then
+        return
+    fi
+    _green "\n卸载完成!"
+    msg "脚本哪里需要完善? 请反馈"
+    msg "反馈问题) $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG/issues)\n"
+}
+
+# manage run status
+manage() {
+    if [[ $is_dont_auto_exit ]]; then
+        return
+    fi
+    case $1 in
+    1 | start)
+        is_do=start
+        is_do_msg=启动
+        is_test_run=1
+        ;;
+    2 | stop)
+        is_do=stop
+        is_do_msg=停止
+        ;;
+    3 | r | restart)
+        is_do=restart
+        is_do_msg=重启
+        is_test_run=1
+        ;;
+    *)
+        is_do=$1
+        is_do_msg=$1
+        ;;
+    esac
+    case $2 in
+    caddy)
+        is_do_name=$2
+        is_run_bin=$is_caddy_bin
+        is_do_name_msg=Caddy
+        ;;
+    *)
+        is_do_name=$is_core
+        is_run_bin=$is_core_bin
+        is_do_name_msg=$is_core_name
+        ;;
+    esac
+    systemctl $is_do $is_do_name
+    if [[ $is_test_run && ! $is_new_install ]]; then
+        sleep 2
+        if [[ ! $(pgrep -f $is_run_bin) ]]; then
+            is_run_fail=${is_do_name_msg,,}
+            if [[ ! $is_no_manage_msg ]]; then
+                msg
+                warn "($is_do_msg) $is_do_name_msg 失败"
+                _yellow "检测到运行失败, 自动执行测试运行."
+                get test-run
+                _yellow "测试结束, 请按 Enter 退出."
+            fi
+        fi
+    fi
+}
+
+# main menu
 is_main_menu() {
     is_main_start=1
     while :; do
