@@ -1,5 +1,5 @@
 # 快速安装脚本
-## `LuoPOJunZi`魔改版
+## `LuoPoJunZi`魔改版
 ```bash
 bash <(curl -s -L https://raw.githubusercontent.com/LuoPoJunZi/Sing-box-LPMG/main/install.sh)
 ```
