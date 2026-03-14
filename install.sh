@@ -68,7 +68,12 @@ is_conf_dir=$is_core_dir/conf
 is_log_dir=/var/log/$is_core
 is_sh_bin=/usr/local/bin/$is_core
 is_sh_dir=$is_core_dir/sh
-is_sh_repo=$author/$is_core
+
+# ==================================================================
+# 核心修改：硬编码你的 Github 仓库地址，防止拉取到 233boy 的原版代码
+# ==================================================================
+is_sh_repo="LuoPoJunZi/Sing-box-LPMG"
+
 is_pkg="wget tar"
 is_config_json=$is_core_dir/config.json
 tmp_var_lists=(
@@ -170,7 +175,10 @@ download() {
         is_ok=$is_core_ok
         ;;
     sh)
-        link=https://github.com/${is_sh_repo}/releases/latest/download/code.tar.gz
+        # =======================================================================
+        # 核心修改：直接从你的 Github 主分支拉取最新代码，不依赖 Release 打包
+        # =======================================================================
+        link="https://github.com/${is_sh_repo}/archive/refs/heads/main.tar.gz"
         name="$is_core_name 脚本"
         tmpfile=$tmpsh
         is_ok=$is_sh_ok
@@ -388,7 +396,10 @@ main() {
     if [[ $local_install ]]; then
         cp -rf $PWD/* $is_sh_dir
     else
-        tar zxf $is_sh_ok -C $is_sh_dir
+        # ==================================================================
+        # 核心修改：增加 --strip-components=1 以适应从 main 分支下载的源码包
+        # ==================================================================
+        tar zxf $is_sh_ok --strip-components=1 -C $is_sh_dir
     fi
 
     # create core bin dir
