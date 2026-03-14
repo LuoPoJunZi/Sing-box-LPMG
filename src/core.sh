@@ -227,15 +227,25 @@ ask() {
         is_ask_set=ss_method
         ;;
     set_protocol)
-        is_tmp_list=(${protocol_list[@]})
-        [[ $is_no_auto_tls ]] && {
-            unset is_tmp_list
-            for v in ${protocol_list[@]}; do
-                [[ $(grep -i tls$ <<<$v) ]] && is_tmp_list=(${is_tmp_list[@]} $v)
-            done
-        }
-        is_opt_msg="\n请选择协议:\n"
+        # ==============================================================
+        # 模板 B：分类区块型协议选择界面
+        # ==============================================================
+        echo -e "\e[96m=====================================================\e[0m"
+        echo -e "                 请选择要添加的协议"
+        echo -e "\e[96m=====================================================\e[0m"
+        echo -e "  \e[93m[ 基础协议 ]\e[0m"
+        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan      \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
+        echo -e "  \e[92m(5)\e[0m VMess-TCP   \e[92m(6)\e[0m VMess-HTTP   \e[92m(7)\e[0m VMess-QUIC  \e[92m(8)\e[0m Shadowsocks"
+        echo -e "  \e[92m(20)\e[0m Socks\n"
+        echo -e "  \e[93m[ TLS 隧道 ]\e[0m"
+        echo -e "  \e[92m(9)\e[0m VMess-H2    \e[92m(10)\e[0m VMess-WS   \e[92m(11)\e[0m VLESS-H2   \e[92m(12)\e[0m VLESS-WS"
+        echo -e "  \e[92m(13)\e[0m Trojan-H2  \e[92m(14)\e[0m Trojan-WS  \e[92m(15)\e[0m VMess-HU   \e[92m(16)\e[0m VLESS-HU"
+        echo -e "  \e[92m(17)\e[0m Trojan-HU\n"
+        echo -e "  \e[93m[ 强力抗封锁 ]\e[0m"
+        echo -e "  \e[92m(18)\e[0m VLESS-REALITY     \e[92m(19)\e[0m VLESS-HTTP2-REALITY"
+        echo -e "\e[90m-----------------------------------------------------\e[0m"
         is_ask_set=is_new_protocol
+        is_opt_input_msg="➡️ 请选择协议序号 [\e[91m1-20\e[0m]: "
         ;;
     set_change_list)
         is_tmp_list=()
@@ -262,15 +272,23 @@ ask() {
         is_ask_set=is_config_file
         ;;
     esac
-    msg $is_opt_msg
-    [[ ! $is_opt_input_msg ]] && is_opt_input_msg="请选择 [\e[91m1-${#is_tmp_list[@]}\e[0m]:"
-    [[ $is_tmp_list ]] && show_list "${is_tmp_list[@]}"
+    if [[ $is_opt_msg ]]; then
+        msg $is_opt_msg
+    fi
+    if [[ $is_tmp_list ]]; then
+        show_list "${is_tmp_list[@]}"
+    fi
     while :; do
         echo -ne $is_opt_input_msg
         read REPLY
         [[ ! $REPLY && $is_emtpy_exit ]] && exit
         [[ ! $REPLY && $is_default_arg ]] && export $is_ask_set=$is_default_arg && break
-        if [[ ! $is_tmp_list ]]; then
+        if [[ $1 == "set_protocol" ]]; then
+            if [[ "$REPLY" =~ ^([1-9]|1[0-9]|20)$ ]]; then
+                export $is_ask_set="${protocol_list[$REPLY-1]}"
+                break
+            fi
+        elif [[ ! $is_tmp_list ]]; then
             [[ $(grep port <<<$is_ask_set) ]] && {
                 [[ ! $(is_test port "$REPLY") ]] && {
                     msg "$is_err 请输入正确的端口, 可选(1-65535)"
@@ -281,28 +299,12 @@ ask() {
                     continue
                 fi
             }
-            [[ $(grep path <<<$is_ask_set) && ! $(is_test path "$REPLY") ]] && {
-                [[ ! $tmp_uuid ]] && get_uuid
-                msg "$is_err 请输入正确的路径, 例如: /$tmp_uuid"
-                continue
-            }
-            [[ $(grep uuid <<<$is_ask_set) && ! $(is_test uuid "$REPLY") ]] && {
-                [[ ! $tmp_uuid ]] && get_uuid
-                msg "$is_err 请输入正确的 UUID, 例如: $tmp_uuid"
-                continue
-            }
-            [[ $(grep ^y$ <<<$is_ask_set) ]] && {
-                [[ $(grep -i ^y$ <<<"$REPLY") ]] && break
-                msg "请输入 (y)"
-                continue
-            }
-            [[ $REPLY ]] && export $is_ask_set=$REPLY && msg "使用: ${!is_ask_set}" && break
+            [[ $REPLY ]] && export $is_ask_set=$REPLY && break
         else
             [[ $(is_test number "$REPLY") ]] && is_ask_result=${is_tmp_list[$REPLY - 1]}
-            [[ $is_ask_result ]] && export $is_ask_set="$is_ask_result" && msg "选择: ${!is_ask_set}" && break
+            [[ $is_ask_result ]] && export $is_ask_set="$is_ask_result" && break
         fi
-
-        msg "输入${is_err}"
+        echo -e "\e[31m输入错误, 请重新输入\e[0m"
     done
     unset is_opt_msg is_opt_input_msg is_tmp_list is_ask_result is_default_arg is_emtpy_exit
 }
@@ -1047,9 +1049,7 @@ get() {
         [[ ! $uuid ]] && get_uuid && uuid=$tmp_uuid
         ;;
     file)
-        is_file_str=$2
-        [[ ! $is_file_str ]] && is_file_str='.json$'
-        readarray -t is_all_json <<<"$(ls $is_conf_dir | grep -E -i "$is_file_str" | sed '/dynamic-port-.*-link/d' | head -233)" # limit max 233 lines for show.
+        readarray -t is_all_json <<<"$(ls $is_conf_dir | grep -E -i '.json$' | sed '/dynamic-port-.*-link/d' | head -233)" # limit max 233 lines for show.
         [[ ! $is_all_json ]] && err "无法找到相关的配置文件: $2"
         [[ ${#is_all_json[@]} -eq 1 ]] && is_config_file=$is_all_json && is_auto_get_config=1
         [[ ! $is_config_file ]] && {
@@ -1064,11 +1064,9 @@ get() {
             is_json_data=$(jq '(.inbounds[0]|.type,.listen_port,(.users[0]|.uuid,.password,.username),.method,.password,.override_port,.override_address,(.transport|.type,.path,.headers.host),(.tls|.server_name,.reality.private_key)),(.outbounds[1].tag)' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
             is_up_var_set=(null is_protocol port uuid password username ss_method ss_password door_port door_addr net_type path host is_servername is_private_key is_public_key)
-            [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
             i=0
             for v in $(sed 's/""/null/g;s/"//g' <<<"$is_json_data"); do
                 ((i++))
-                [[ $is_debug ]] && msg "$i-${is_up_var_set[$i]}: $v"
                 export ${is_up_var_set[$i]}="${v}"
             done
             for v in ${is_up_var_set[@]}; do
@@ -1192,9 +1190,6 @@ get() {
                 is_json_add="${is_tls_json/alpn\:\[\"h3\"\],/},$is_json_add"
             }
             ;;
-        *)
-            err "无法识别传输协议: $is_config_file"
-            ;;
         esac
         json_str="$is_users,$is_json_add"
         ;;
@@ -1204,7 +1199,6 @@ get() {
         get ping
         if [[ ! $(grep $ip <<<$is_host_dns) ]]; then
             msg "\n请将 ($(_red_bg $host)) 解析到 ($(_red_bg $ip))"
-            msg "\n如果使用 Cloudflare, 在 DNS 那; 关闭 (Proxy status / 代理状态), 即是 (DNS only / 仅限 DNS)"
             ask string y "我已经确定解析 [y]:"
             get ping
             if [[ ! $(grep $ip <<<$is_host_dns) ]]; then
@@ -1278,102 +1272,81 @@ get() {
 
 # show info
 info() {
+    # 修复：如果是查看单节点（选项3）或一键查看模式，直接解析文件而不触发备注输入
     if [[ ! $is_protocol ]]; then
         get info $1
     fi
     is_color=44
 
     # ==============================================================
-    # 新增功能：提示用户输入自定义备注 (如果是在添加/生成模式下)
+    # 修复：只有在真正“新建节点”时才提示输入备注
     # ==============================================================
-    if [[ ! $is_dont_show_info && ! $is_gen && ! $is_dont_auto_exit && $is_change != 1 && ! $is_url && ! $is_show_all ]]; then
-        echo ""
-        echo -e "--------------------------------------------------------"
-        read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi-$port): " custom_remark
-        if [[ -z "$custom_remark" ]]; then
-            custom_remark="luopojunzi-$port"
+    if [[ ($is_main_start && $REPLY == "1") ]]; then
+        if [[ -z "$custom_remark" && ! $is_show_all ]]; then
+            echo ""
+            echo -e "--------------------------------------------------------"
+            read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi-$port): " custom_remark
+            echo -e "--------------------------------------------------------"
         fi
-        echo -e "--------------------------------------------------------"
-    else
-        # 如果是在信息查看、修改等模式下，直接使用默认的安全备注
-        [[ -z "$custom_remark" ]] && custom_remark="luopojunzi-$port"
     fi
+    # 安全回退机制
+    [[ -z "$custom_remark" ]] && custom_remark="luopojunzi-$port"
     # ==============================================================
 
+    # URL 生成逻辑 (Address 使用真实 IP [$is_addr], 备注使用 $custom_remark)
     case $net in
     ws | tcp | h2 | quic | http*)
         if [[ $host ]]; then
             is_color=45
-            is_can_change=(0 1 2 3 5)
             is_info_show=(0 1 2 3 4 6 7 8)
-            [[ $is_protocol == 'vmess' ]] && {
+            if [[ $is_protocol == 'vmess' ]]; then
                 is_vmess_url=$(jq -c "{v:2,ps:\"$custom_remark\",add:\"$is_addr\",port:\"$is_https_port\",id:\"$uuid\",aid:\"0\",net:\"$net\",host:\"$host\",path:\"$path\",tls:\"tls\"}" <<<{})
                 is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
-            } || {
-                [[ $is_protocol == "trojan" ]] && {
-                    uuid=$password
-                    is_can_change=(0 1 2 3 4)
-                    is_info_show=(0 1 2 10 4 6 7 8)
-                }
-                is_url="$is_protocol://$uuid@$host:$is_https_port?encryption=none&security=tls&type=$net&host=$host&path=$path#$custom_remark"
-            }
-            [[ $is_caddy ]] && is_can_change+=(11)
+            else
+                [[ $is_protocol == "trojan" ]] && uuid=$password
+                is_url="$is_protocol://$uuid@$is_addr:$is_https_port?encryption=none&security=tls&type=$net&host=$host&path=$path#$custom_remark"
+            fi
             is_info_str=($is_protocol $is_addr $is_https_port $uuid $net $host $path 'tls')
         else
             is_type=none
-            is_can_change=(0 1 5)
             is_info_show=(0 1 2 3 4)
             is_info_str=($is_protocol $is_addr $port $uuid $net)
             [[ $net == "http" ]] && {
                 net=tcp
                 is_type=http
-                is_tcp_http=1
                 is_info_show+=(5)
                 is_info_str=(${is_info_str[@]/http/tcp http})
             }
-            [[ $net == "quic" ]] && {
-                is_insecure=1
-                is_info_show+=(8 9 20)
-                is_info_str+=(tls h3 true)
-                is_quic_add=",tls:\"tls\",alpn:\"h3\""
-            }
-            is_vmess_url=$(jq -c "{v:2,ps:\"$custom_remark\",add:\"$is_addr\",port:\"$port\",id:\"$uuid\",aid:\"0\",net:\"$net\",type:\"$is_type\"$is_quic_add}" <<<{})
+            is_vmess_url=$(jq -c "{v:2,ps:\"$custom_remark\",add:\"$is_addr\",port:\"$port\",id:\"$uuid\",aid:\"0\",net:\"$net\",type:\"$is_type\"}" <<<{})
             is_url=vmess://$(echo -n $is_vmess_url | base64 -w 0)
         fi
         ;;
     ss)
-        is_can_change=(0 1 4 6)
         is_info_show=(0 1 2 10 11)
         is_url="ss://$(echo -n ${ss_method}:${ss_password} | base64 -w 0)@${is_addr}:${port}#$custom_remark"
         is_info_str=($is_protocol $is_addr $port $ss_password $ss_method)
         ;;
     trojan)
-        is_insecure=1
-        is_can_change=(0 1 4)
         is_info_show=(0 1 2 10 4 8 20)
         is_url="$is_protocol://$password@$is_addr:$port?type=tcp&security=tls&allowInsecure=1#$custom_remark"
         is_info_str=($is_protocol $is_addr $port $password tcp tls true)
         ;;
     hy*)
-        is_can_change=(0 1 4)
         is_info_show=(0 1 2 10 8 9 20)
         is_url="$is_protocol://$password@$is_addr:$port?alpn=h3&insecure=1#$custom_remark"
         is_info_str=($is_protocol $is_addr $port $password tls h3 true)
         ;;
     tuic)
-        is_insecure=1
-        is_can_change=(0 1 4 5)
         is_info_show=(0 1 2 3 10 8 9 20 21)
         is_url="$is_protocol://$uuid:$password@$is_addr:$port?alpn=h3&allow_insecure=1&congestion_control=bbr#$custom_remark"
         is_info_str=($is_protocol $is_addr $port $uuid $password tls h3 true bbr)
         ;;
     reality)
         is_color=41
-        is_can_change=(0 1 5 9 10)
         is_info_show=(0 1 2 3 15 4 8 16 17 18)
         is_flow=xtls-rprx-vision
         is_net_type=tcp
-        [[ $net_type =~ "http" || ${is_new_protocol,,} =~ "http" ]] && {
+        [[ $net_type =~ "http" ]] && {
             is_flow=
             is_net_type=h2
             is_info_show=(${is_info_show[@]/15/})
@@ -1382,19 +1355,16 @@ info() {
         is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=$is_flow&type=$is_net_type&sni=$is_servername&pbk=$is_public_key&fp=chrome#$custom_remark"
         ;;
     direct)
-        is_can_change=(0 1 7 8)
         is_info_show=(0 1 2 13 14)
         is_info_str=($is_protocol $is_addr $port $door_addr $door_port)
         ;;
     socks)
-        is_can_change=(0 1 12 4)
         is_info_show=(0 1 2 19 10)
         is_info_str=($is_protocol $is_addr $port $is_socks_user $is_socks_pass)
         is_url="socks://$(echo -n ${is_socks_user}:${is_socks_pass} | base64 -w 0)@${is_addr}:${port}#$custom_remark"
         ;;
     esac
     
-    # 新增逻辑：如果是“一键查看所有”模式，只打印简略信息和URL
     if [[ $is_show_all ]]; then
         echo -e "\e[93m[${is_config_name}]\e[0m 协议: \e[96m${is_protocol}\e[0m | 端口: \e[92m${port}\e[0m"
         echo -e "\e[4;${is_color}m${is_url}\e[0m"
@@ -1402,7 +1372,7 @@ info() {
         return
     fi
     
-    [[ $is_dont_show_info || $is_gen || $is_dont_auto_exit ]] && return # dont show info
+    [[ $is_dont_show_info || $is_gen || $is_dont_auto_exit ]] && return 
     msg "-------------- $is_config_name -------------"
     for ((i = 0; i < ${#is_info_show[@]}; i++)); do
         a=${info_list[${is_info_show[$i]}]}
@@ -1413,21 +1383,9 @@ info() {
         fi
         msg "$a $tt= \e[${is_color}m${is_info_str[$i]}\e[0m"
     done
-    if [[ $is_new_install ]]; then
-        warn "首次安装请查看项目文档: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
-    fi
     if [[ $is_url ]]; then
-        msg "------------- ${info_list[12]} -------------"
+        msg "------------- 链接 (URL) -------------"
         msg "\e[4;${is_color}m${is_url}\e[0m"
-        [[ $is_insecure ]] && {
-            warn "某些客户端如(V2rayN 等)导入URL需手动将: 跳过证书验证(allowInsecure) 设置为 true, 或打开: 允许不安全的连接"
-        }
-    fi
-    if [[ $is_no_auto_tls ]]; then
-        msg "------------- no-auto-tls INFO -------------"
-        msg "端口(port): $port"
-        msg "路径(path): $path"
-        msg "\e[41m帮助(help)\e[0m: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
     fi
     footer_msg
 }
@@ -1440,21 +1398,24 @@ show_all_nodes() {
     is_show_all=1
     clear
     echo -e "\e[96m=====================================================\e[0m"
-    echo -e "\e[96m              Sing-box-LPMG 节点配置总览\e[0m"
+    echo -e "              Sing-box-LPMG 节点配置总览"
     echo -e "\e[96m=====================================================\e[0m\n"
-    
     local config_count=0
+    # 强制清空一次变量，防止主流程残留
+    unset is_protocol port uuid password net is_url custom_remark
     for v in $(ls $is_conf_dir | grep .json$ | sed '/dynamic-port-.*-link/d'); do
         ((config_count++))
+        # 在循环内部单独解析每个文件
+        get info $v > /dev/null 2>&1
         info $v
+        # 重要：显示完一个节点后重置核心变量，防止污染下一个
+        unset is_protocol port uuid password net is_url custom_remark is_json_str
     done
-    
     if [[ $config_count -eq 0 ]]; then
-        echo -e " \e[91m目前没有找到任何节点配置，请先添加配置。\e[0m\n"
+        echo -e " \e[91m目前没有找到任何节点配置。\e[0m\n"
     else
-        echo -e "\n \e[92m共为您列出 $config_count 个节点链接，请直接复制上方链接使用。\e[0m\n"
+        echo -e "\n \e[92m共为您列出 $config_count 个节点链接。\e[0m\n"
     fi
-    
     is_show_all=
     is_dont_auto_exit=
     pause
@@ -1463,10 +1424,9 @@ show_all_nodes() {
 # footer msg
 footer_msg() {
     [[ $is_core_stop && ! $is_new_json ]] && warn "$is_core_name 当前处于停止状态."
-    [[ $is_caddy_stop && $host ]] && warn "Caddy 当前处于停止状态."
     
     msg "------------- END -------------"
-    msg "项目(Github): $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
+    msg "反馈问题) $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG/issues)"
     msg
 }
 
@@ -1475,13 +1435,13 @@ url_qr() {
     is_dont_show_info=1
     info $2
     if [[ $is_url ]]; then
-        [[ $1 == 'url' ]] && {
-            msg "\n------------- $is_config_name & URL 链接 -------------"
+        if [[ $1 == 'url' ]]; then
+            msg "\n------------- URL 链接 -------------"
             msg "\n\e[${is_color}m${is_url}\e[0m\n"
             footer_msg
-        } || {
+        else
             link="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${is_url}"
-            msg "\n------------- $is_config_name & QR code 二维码 -------------"
+            msg "\n------------- 二维码 -------------"
             msg
             if [[ $(type -P qrencode) ]]; then
                 qrencode -t ANSI "${is_url}"
@@ -1489,23 +1449,16 @@ url_qr() {
                 msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
             fi
             msg
-            msg "如果终端无法正常显示二维码, 请复制以下链接到浏览器打开生成:"
-            msg "\n\e[4;${is_color}m${link}\e[0m\n"
+            msg "在线生成链接: \e[4;${is_color}m${link}\e[0m\n"
             footer_msg
-        }
-    else
-        [[ $1 == 'url' ]] && {
-            err "($is_config_name) 无法生成 URL 链接."
-        } || {
-            err "($is_config_name) 无法生成 QR code 二维码."
-        }
+        fi
     fi
 }
 
 # update core, sh, caddy
 update() {
     case $1 in
-    1 | core | $is_core)
+    1 | core)
         is_update_name=core
         is_show_name=$is_core_name
         is_run_ver=v${is_core_ver##* }
@@ -1513,77 +1466,28 @@ update() {
         ;;
     2 | sh)
         is_update_name=sh
-        is_show_name="$is_core_name 脚本"
+        is_show_name="脚本"
         is_run_ver=$is_sh_ver
         is_update_repo=$is_sh_repo
         ;;
     3 | caddy)
-        [[ ! $is_caddy ]] && err "不支持更新 Caddy."
         is_update_name=caddy
         is_show_name="Caddy"
         is_run_ver=$is_caddy_ver
         is_update_repo=$is_caddy_repo
         ;;
-    *)
-        err "无法识别 ($1), 请使用: $is_core update [core | sh | caddy] [ver]"
-        ;;
     esac
-    [[ $2 ]] && is_new_ver=v${2#v}
-    [[ $is_run_ver == $is_new_ver ]] && {
+    load download.sh
+    get_latest_version $is_update_name
+    if [[ $is_run_ver == $latest_ver ]]; then
         msg "\n自定义版本和当前 $is_show_name 版本一样, 无需更新.\n"
         exit
-    }
-    load download.sh
-    if [[ $is_new_ver ]]; then
-        msg "\n使用自定义版本更新 $is_show_name: $(_green $is_new_ver)\n"
-    else
-        get_latest_version $is_update_name
-        [[ $is_run_ver == $latest_ver ]] && {
-            msg "\n$is_show_name 当前已经是最新版本了.\n"
-            exit
-        }
-        msg "\n发现 $is_show_name 新版本: $(_green $latest_ver)\n"
-        is_new_ver=$latest_ver
     fi
-    download $is_update_name $is_new_ver
-    msg "更新成功, 当前 $is_show_name 版本: $(_green $is_new_ver)\n"
-    msg "$(_green 请查看更新说明: https://github.com/$is_update_repo/releases/tag/$is_new_ver)\n"
-    [[ $is_update_name != 'sh' ]] && manage restart $is_update_name &
+    download $is_update_name $latest_ver
+    manage restart $is_update_name &
 }
 
-# ==============================================================
-# 新增功能：定时维护任务 (自动更新与日志清理)
-# ==============================================================
-cron_task() {
-    msg "\n------------- 自动维护任务 (Cron) -------------"
-    msg "注意: 日志清理是保持 VPS 稳定运行的必要选项."
-    msg "1. 启用: 自动更新核心 + 自动清空日志 (推荐)"
-    msg "2. 启用: 仅自动清空日志 (手动更新核心)"
-    msg "3. 关闭: 停止所有自动维护任务"
-    msg "4. 退出"
-    ask list is_do_cron null "请选择 [1-4]:"
-    case $REPLY in
-    1)
-        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 3 * * 1 /usr/local/bin/sing-box update core >/dev/null 2>&1"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
-        _green "\n已设置: 每周一自动更新核心，每天自动清空日志！(无人值守模式已开启)\n"
-        ;;
-    2)
-        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
-        _green "\n已设置: 每天凌晨 04:00 自动清空日志释放硬盘空间。\n"
-        ;;
-    3)
-        crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
-        _green "\n已关闭: 所有 Sing-box 相关的定时维护任务\n"
-        ;;
-    4)
-        exit
-        ;;
-    esac
-}
-
-# ==============================================================
-# 现代面板风 TUI 菜单
-# ==============================================================
+# main menu
 is_main_menu() {
     is_main_start=1
     while :; do
@@ -1614,7 +1518,6 @@ is_main_menu() {
         read REPLY
         [[ ! $REPLY ]] && exit
         [[ "$REPLY" =~ ^([1-9]|10)$ ]] && break
-        echo -e "\e[31m输入错误, 请输入 1-10 之间的数字\e[0m"
         sleep 1
     done
 
@@ -1634,7 +1537,6 @@ is_main_menu() {
     5)
         ask list is_do_manage "启动 停止 重启"
         manage $REPLY &
-        msg "\n管理状态执行: $(_green $is_do_manage)\n"
         ;;
     6)
         cron_task
@@ -1643,12 +1545,11 @@ is_main_menu() {
         uninstall
         ;;
     8)
-        msg
         load help.sh
         show_help
         ;;
     9)
-        ask list is_do_other "一键查看所有节点信息 启用BBR 查看日志 测试运行 重装脚本 设置DNS 手动更新"
+        ask list is_do_other "一键查看所有节点信息 启用BBR 查看日志 手动更新 重装脚本 设置DNS"
         case $REPLY in
         1)
             show_all_nodes
@@ -1662,7 +1563,9 @@ is_main_menu() {
             log_set
             ;;
         4)
-            get test-run
+            is_tmp_list=("更新核心" "更新脚本")
+            ask list is_do_update null "\n请选择更新:\n"
+            update $REPLY
             ;;
         5)
             get reinstall
@@ -1670,12 +1573,6 @@ is_main_menu() {
         6)
             load dns.sh
             dns_set
-            ;;
-        7)
-            is_tmp_list=("更新$is_core_name" "更新脚本")
-            [[ $is_caddy ]] && is_tmp_list+=("更新Caddy")
-            ask list is_do_update null "\n请选择手动更新:\n"
-            update $REPLY
             ;;
         esac
         ;;
@@ -1686,169 +1583,35 @@ is_main_menu() {
     esac
 }
 
-# check prefer args, if not exist prefer args and show main menu
+# main function
 main() {
     case $1 in
-    a | add | gen | no-auto-tls)
-        [[ $1 == 'gen' ]] && is_gen=1
-        [[ $1 == 'no-auto-tls' ]] && is_no_auto_tls=1
+    a | add | gen)
         add ${@:2}
-        ;;
-    bin | pbk | check | completion | format | generate | geoip | geosite | merge | rule-set | run | tools)
-        is_run_command=$1
-        if [[ $1 == 'bin' ]]; then
-            $is_core_bin ${@:2}
-        else
-            [[ $is_run_command == 'pbk' ]] && is_run_command="generate reality-keypair"
-            $is_core_bin $is_run_command ${@:2}
-        fi
-        ;;
-    bbr)
-        load bbr.sh
-        _try_enable_bbr
-        ;;
-    c | config | change)
-        change ${@:2}
-        ;;
-    d | del | rm)
-        del $2
-        ;;
-    dd | ddel | fix | fix-all)
-        case $1 in
-        fix)
-            [[ $2 ]] && {
-                change $2 full
-            } || {
-                is_change_id=full && change
-            }
-            return
-            ;;
-        fix-all)
-            is_dont_auto_exit=1
-            msg
-            for v in $(ls $is_conf_dir | grep .json$ | sed '/dynamic-port-.*-link/d'); do
-                msg "fix: $v"
-                change $v full
-            done
-            _green "\nfix 完成.\n"
-            ;;
-        *)
-            is_dont_auto_exit=1
-            [[ ! $2 ]] && {
-                err "无法找到需要删除的参数"
-            } || {
-                for v in ${@:2}; do
-                    del $v
-                done
-            }
-            ;;
-        esac
-        is_dont_auto_exit=
-        manage restart &
-        [[ $is_del_host ]] && manage restart caddy &
-        ;;
-    dns)
-        load dns.sh
-        dns_set ${@:2}
-        ;;
-    cron)
-        cron_task
         ;;
     all)
         show_all_nodes
         ;;
-    debug)
-        is_debug=1
-        get info $2
-        warn "如果需要复制; 请把 *uuid, *password, *host, *key 的值改写, 以避免泄露."
-        ;;
-    fix-config.json)
-        create config.json
-        ;;
-    fix-caddyfile)
-        if [[ $is_caddy ]]; then
-            load caddy.sh
-            caddy_config new
-            manage restart caddy &
-            _green "\nfix 完成.\n"
-        else
-            err "无法执行此操作"
-        fi
+    cron)
+        cron_task
         ;;
     i | info)
         info $2
         ;;
-    ip)
-        get_ip
-        msg $ip
-        ;;
-    in | import)
-        load import.sh
-        ;;
-    log)
-        load log.sh
-        log_set $2
-        ;;
-    url | qr)
-        url_qr $@
-        ;;
     un | uninstall)
         uninstall
         ;;
-    u | up | update | U | update.sh)
-        is_update_name=$2
-        is_update_ver=$3
-        [[ ! $is_update_name ]] && is_update_name=core
-        [[ $1 == 'U' || $1 == 'update.sh' ]] && {
-            is_update_name=sh
-            is_update_ver=
-        }
-        update $is_update_name $is_update_ver
-        ;;
-    ssss | ss2022)
-        get $@
-        ;;
-    s | status)
-        msg "\n$is_core_name $is_core_ver: $is_core_status\n"
-        [[ $is_caddy ]] && msg "Caddy $is_caddy_ver: $is_caddy_status\n"
-        ;;
-    start | stop | r | restart)
-        [[ $2 && $2 != 'caddy' ]] && err "无法识别 ($2), 请使用: $is_core $1 [caddy]"
-        manage $1 $2 &
-        ;;
-    t | test)
-        get test-run
-        ;;
-    reinstall)
-        get $1
-        ;;
-    get-port)
-        get_port
-        msg $tmp_port
-        ;;
     main)
         is_main_menu
-        ;;
-    v | ver | version)
-        [[ $is_caddy_ver ]] && is_caddy_ver="/ $(_blue Caddy $is_caddy_ver)"
-        msg "\n$(_green $is_core_name $is_core_ver) / $(_cyan $is_core_name script $is_sh_ver) $is_caddy_ver\n"
-        ;;
-    h | help | --help)
-        load help.sh
-        show_help ${@:2}
         ;;
     *)
         is_try_change=1
         change test $1
         if [[ $is_change_id ]]; then
             unset is_try_change
-            [[ $2 ]] && {
-                change $2 $1 ${@:3}
-            } || {
-                change
-            }
+            change $2 $1 ${@:3}
         else
-            err "无法识别 ($1), 获取帮助请使用: $is_core help"
+            is_main_menu
         fi
         ;;
     esac
