@@ -95,6 +95,7 @@ msg_ul() {
     echo -e "\e[4m$@\e[0m"
 }
 
+# pause
 pause() {
     echo
     echo -ne "按 $(_green Enter 回车键) 继续, 或按 $(_red Ctrl + C) 取消."
@@ -119,6 +120,9 @@ get_ip() {
     fi
 }
 
+# ==============================================================
+# 新增功能：智能防火墙放行
+# ==============================================================
 firewall_allow() {
     local target_port=$1
     if [[ -z "$target_port" ]]; then
@@ -241,7 +245,7 @@ ask() {
         echo -e "                 请选择要添加的协议"
         echo -e "\e[96m=====================================================\e[0m"
         echo -e "  \e[93m[ 基础协议 ]\e[0m"
-        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan       \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
+        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan      \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
         echo -e "  \e[92m(5)\e[0m VMess-TCP   \e[92m(6)\e[0m VMess-HTTP   \e[92m(7)\e[0m VMess-QUIC  \e[92m(8)\e[0m Shadowsocks"
         echo -e "  \e[92m(20)\e[0m Socks\n"
         echo -e "  \e[93m[ TLS 隧道 ]\e[0m"
@@ -299,8 +303,6 @@ ask() {
             export $is_ask_set=$is_default_arg
             break
         fi
-        
-        # 防止误按回车直接退出，这里做了特殊处理
         if [[ ! $REPLY && ! $is_default_arg && ! $is_emtpy_exit ]]; then
             continue
         fi
@@ -1138,10 +1140,7 @@ info() {
     fi
     is_color=44
 
-    # 直接使用文件名解析出备注，完美回退，确保 URL 名称不出错
     if [[ -z "$custom_remark" ]]; then
-        # 提取文件名中夹在协议和端口中间的备注部分
-        # 格式为: 协议-备注-端口.json，如 VLESS-REALITY-测试-52380.json
         local tmp_name="${is_config_name%.json}"
         local stripped_port="${tmp_name%-[0-9]*}"
         custom_remark="${stripped_port#*-}"
@@ -1621,6 +1620,104 @@ add() {
 
     create server $is_new_protocol
     info
+}
+
+footer_msg() {
+    if [[ $is_core_stop && ! $is_new_json ]]; then
+        warn "$is_core_name 当前处于停止状态."
+    fi
+    if [[ $is_caddy_stop && $host ]]; then
+        warn "Caddy 当前处于停止状态."
+    fi
+    
+    msg "------------- END -------------"
+    msg "项目(Github): $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
+    msg
+}
+
+url_qr() {
+    is_dont_show_info=1
+    info $2
+    if [[ $is_url ]]; then
+        if [[ $1 == 'url' ]]; then
+            msg "\n------------- $is_config_name & URL 链接 -------------"
+            msg "\n\e[${is_color}m${is_url}\e[0m\n"
+            footer_msg
+        else
+            link="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${is_url}"
+            msg "\n------------- $is_config_name & QR code 二维码 -------------"
+            msg
+            if [[ $(type -P qrencode) ]]; then
+                qrencode -t ANSI "${is_url}"
+            else
+                msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
+            fi
+            msg
+            msg "如果终端无法正常显示二维码, 请复制以下链接到浏览器打开生成:"
+            msg "\n\e[4;${is_color}m${link}\e[0m\n"
+            footer_msg
+        fi
+    else
+        if [[ $1 == 'url' ]]; then
+            err "($is_config_name) 无法生成 URL 链接."
+        else
+            err "($is_config_name) 无法生成 QR code 二维码."
+        fi
+    fi
+}
+
+update() {
+    case $1 in
+    1 | core | $is_core)
+        is_update_name=core
+        is_show_name=$is_core_name
+        is_run_ver=v${is_core_ver##* }
+        is_update_repo=$is_core_repo
+        ;;
+    2 | sh)
+        is_update_name=sh
+        is_show_name="$is_core_name 脚本"
+        is_run_ver=$is_sh_ver
+        is_update_repo=$is_sh_repo
+        ;;
+    3 | caddy)
+        if [[ ! $is_caddy ]]; then
+            err "不支持更新 Caddy."
+        fi
+        is_update_name=caddy
+        is_show_name="Caddy"
+        is_run_ver=$is_caddy_ver
+        is_update_repo=$is_caddy_repo
+        ;;
+    *)
+        err "无法识别 ($1), 请使用: $is_core update [core | sh | caddy] [ver]"
+        ;;
+    esac
+    if [[ $2 ]]; then
+        is_new_ver=v${2#v}
+    fi
+    if [[ $is_run_ver == $is_new_ver ]]; then
+        msg "\n自定义版本和当前 $is_show_name 版本一样, 无需更新.\n"
+        exit
+    fi
+    load download.sh
+    if [[ $is_new_ver ]]; then
+        msg "\n使用自定义版本更新 $is_show_name: $(_green $is_new_ver)\n"
+    else
+        get_latest_version $is_update_name
+        if [[ $is_run_ver == $latest_ver ]]; then
+            msg "\n$is_show_name 当前已经是最新版本了.\n"
+            exit
+        fi
+        msg "\n发现 $is_show_name 新版本: $(_green $latest_ver)\n"
+        is_new_ver=$latest_ver
+    fi
+    download $is_update_name $is_new_ver
+    msg "更新成功, 当前 $is_show_name 版本: $(_green $is_new_ver)\n"
+    msg "$(_green 请查看更新说明: https://github.com/$is_update_repo/releases/tag/$is_new_ver)\n"
+    if [[ $is_update_name != 'sh' ]]; then
+        manage restart $is_update_name &
+    fi
 }
 
 uninstall() {
