@@ -95,7 +95,6 @@ msg_ul() {
     echo -e "\e[4m$@\e[0m"
 }
 
-# pause
 pause() {
     echo
     echo -ne "按 $(_green Enter 回车键) 继续, 或按 $(_red Ctrl + C) 取消."
@@ -120,9 +119,6 @@ get_ip() {
     fi
 }
 
-# ==============================================================
-# 新增功能：智能防火墙放行
-# ==============================================================
 firewall_allow() {
     local target_port=$1
     if [[ -z "$target_port" ]]; then
@@ -830,6 +826,396 @@ del() {
     fi
 }
 
+uninstall() {
+    if [[ $is_caddy ]]; then
+        is_tmp_list=("卸载 $is_core_name" "卸载 ${is_core_name} & Caddy")
+        ask list is_do_uninstall
+    else
+        ask string y "是否卸载 ${is_core_name}? [y]:"
+    fi
+    manage stop &>/dev/null
+    manage disable &>/dev/null
+    
+    crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
+
+    rm -rf $is_core_dir $is_log_dir $is_sh_bin ${is_sh_bin/$is_core/sb} /lib/systemd/system/$is_core.service
+    sed -i "/$is_core/d" /root/.bashrc
+    
+    if [[ $REPLY == '2' ]]; then
+        manage stop caddy &>/dev/null
+        manage disable caddy &>/dev/null
+        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service
+    fi
+    if [[ $is_install_sh ]]; then
+        return
+    fi
+    _green "\n卸载完成!"
+    msg "脚本哪里需要完善? 请反馈"
+    msg "反馈问题) $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG/issues)\n"
+}
+
+manage() {
+    if [[ $is_dont_auto_exit ]]; then
+        return
+    fi
+    case $1 in
+    1 | start)
+        is_do=start
+        is_do_msg=启动
+        is_test_run=1
+        ;;
+    2 | stop)
+        is_do=stop
+        is_do_msg=停止
+        ;;
+    3 | r | restart)
+        is_do=restart
+        is_do_msg=重启
+        is_test_run=1
+        ;;
+    *)
+        is_do=$1
+        is_do_msg=$1
+        ;;
+    esac
+    case $2 in
+    caddy)
+        is_do_name=$2
+        is_run_bin=$is_caddy_bin
+        is_do_name_msg=Caddy
+        ;;
+    *)
+        is_do_name=$is_core
+        is_run_bin=$is_core_bin
+        is_do_name_msg=$is_core_name
+        ;;
+    esac
+    systemctl $is_do $is_do_name
+    if [[ $is_test_run && ! $is_new_install ]]; then
+        sleep 2
+        if [[ ! $(pgrep -f $is_run_bin) ]]; then
+            is_run_fail=${is_do_name_msg,,}
+            if [[ ! $is_no_manage_msg ]]; then
+                msg
+                warn "($is_do_msg) $is_do_name_msg 失败"
+                _yellow "检测到运行失败, 自动执行测试运行."
+                get test-run
+                _yellow "测试结束, 请按 Enter 退出."
+            fi
+        fi
+    fi
+}
+
+add() {
+    unset custom_remark
+    is_lower=${1,,}
+    if [[ $is_lower ]]; then
+        case $is_lower in
+        ws | tcp | quic | http)
+            is_new_protocol=VMess-${is_lower^^}
+            ;;
+        wss | h2 | hu | vws | vh2 | vhu | tws | th2 | thu)
+            is_new_protocol=$(sed -E "s/^V/VLESS-/;s/^T/Trojan-/;/^(W|H)/{s/^/VMess-/};s/WSS/WS/;s/HU/HTTPUpgrade/" <<<${is_lower^^})-TLS
+            ;;
+        r | reality)
+            is_new_protocol=VLESS-REALITY
+            ;;
+        rh2)
+            is_new_protocol=VLESS-HTTP2-REALITY
+            ;;
+        ss)
+            is_new_protocol=Shadowsocks
+            ;;
+        door | direct)
+            is_new_protocol=Direct
+            ;;
+        tuic)
+            is_new_protocol=TUIC
+            ;;
+        hy | hy2 | hysteria*)
+            is_new_protocol=Hysteria2
+            ;;
+        trojan)
+            is_new_protocol=Trojan
+            ;;
+        socks)
+            is_new_protocol=Socks
+            ;;
+        *)
+            for v in ${protocol_list[@]}; do
+                if [[ $(grep -E -i "^$is_lower$" <<<$v) ]]; then
+                    is_new_protocol=$v
+                    break
+                fi
+            done
+
+            if [[ ! $is_new_protocol ]]; then
+                err "无法识别 ($1), 请使用: $is_core add [protocol] [args... | auto]"
+            fi
+            ;;
+        esac
+    fi
+
+    if [[ ! $is_new_protocol ]]; then
+        ask set_protocol
+    fi
+
+    case ${is_new_protocol,,} in
+    *-tls)
+        is_use_tls=1
+        is_use_host=$2
+        is_use_uuid=$3
+        is_use_path=$4
+        is_add_opts="[host] [uuid] [/path]"
+        ;;
+    vmess* | tuic*)
+        is_use_port=$2
+        is_use_uuid=$3
+        is_add_opts="[port] [uuid]"
+        ;;
+    trojan* | hysteria*)
+        is_use_port=$2
+        is_use_pass=$3
+        is_add_opts="[port] [password]"
+        ;;
+    *reality*)
+        is_reality=1
+        is_use_port=$2
+        is_use_uuid=$3
+        is_use_servername=$4
+        is_add_opts="[port] [uuid] [sni]"
+        ;;
+    shadowsocks)
+        is_use_port=$2
+        is_use_pass=$3
+        is_use_method=$4
+        is_add_opts="[port] [password] [method]"
+        ;;
+    direct)
+        is_use_port=$2
+        is_use_door_addr=$3
+        is_use_door_port=$4
+        is_add_opts="[port] [remote_addr] [remote_port]"
+        ;;
+    socks)
+        is_socks=1
+        is_use_port=$2
+        is_use_socks_user=$3
+        is_use_socks_pass=$4
+        is_add_opts="[port] [username] [password]"
+        ;;
+    esac
+
+    if [[ $1 && ! $is_change ]]; then
+        msg "\n使用协议: $is_new_protocol"
+        is_err_tips="\n\n请使用: $(_green $is_core add $1 $is_add_opts) 来添加 $is_new_protocol 配置"
+    fi
+
+    if [[ $is_set_new_protocol ]]; then
+        case $is_old_net in
+        h2 | ws | httpupgrade)
+            old_host=$host
+            if [[ ! $is_use_tls ]]; then
+                unset host is_no_auto_tls
+            fi
+            ;;
+        reality)
+            net_type=
+            if [[ ! $(grep -i reality <<<$is_new_protocol) ]]; then
+                is_reality=
+            fi
+            ;;
+        ss)
+            if [[ $(is_test uuid $ss_password) ]]; then
+                uuid=$ss_password
+            fi
+            ;;
+        esac
+        if [[ ! $(is_test uuid $uuid) ]]; then
+            uuid=
+        fi
+        if [[ $(is_test uuid $password) ]]; then
+            uuid=$password
+        fi
+    fi
+
+    if [[ $is_no_auto_tls && ! $is_use_tls ]]; then
+        err "$is_new_protocol 不支持手动配置 tls."
+    fi
+
+    if [[ $2 ]]; then
+        for v in is_use_port is_use_uuid is_use_host is_use_path is_use_pass is_use_method is_use_door_addr is_use_door_port; do
+            if [[ ${!v} == 'auto' ]]; then
+                unset $v
+            fi
+        done
+
+        if [[ $is_use_port ]]; then
+            if [[ ! $(is_test port ${is_use_port}) ]]; then
+                err "($is_use_port) 不是一个有效的端口. $is_err_tips"
+            fi
+            if [[ $(is_test port_used $is_use_port) && ! $is_gen ]]; then
+                err "无法使用 ($is_use_port) 端口. $is_err_tips"
+            fi
+            port=$is_use_port
+        fi
+        if [[ $is_use_door_port ]]; then
+            if [[ ! $(is_test port ${is_use_door_port}) ]]; then
+                err "(${is_use_door_port}) 不是一个有效的目标端口. $is_err_tips"
+            fi
+            door_port=$is_use_door_port
+        fi
+        if [[ $is_use_uuid ]]; then
+            if [[ ! $(is_test uuid $is_use_uuid) ]]; then
+                err "($is_use_uuid) 不是一个有效的 UUID. $is_err_tips"
+            fi
+            uuid=$is_use_uuid
+        fi
+        if [[ $is_use_path ]]; then
+            if [[ ! $(is_test path $is_use_path) ]]; then
+                err "($is_use_path) 不是有效的路径. $is_err_tips"
+            fi
+            path=$is_use_path
+        fi
+        if [[ $is_use_method ]]; then
+            is_tmp_use_name=加密方式
+            is_tmp_list=${ss_method_list[@]}
+            for v in ${is_tmp_list[@]}; do
+                if [[ $(grep -E -i "^${is_use_method}$" <<<$v) ]]; then
+                    is_tmp_use_type=$v
+                    break
+                fi
+            done
+            if [[ ! ${is_tmp_use_type} ]]; then
+                warn "(${is_use_method}) 不是一个可用的${is_tmp_use_name}."
+                msg "${is_tmp_use_name}可用如下: "
+                for v in ${is_tmp_list[@]}; do
+                    msg "\t\t$v"
+                done
+                msg "$is_err_tips\n"
+                exit 1
+            fi
+            ss_method=$is_tmp_use_type
+        fi
+        if [[ $is_use_pass ]]; then
+            ss_password=$is_use_pass
+            password=$is_use_pass
+        fi
+        if [[ $is_use_host ]]; then
+            host=$is_use_host
+        fi
+        if [[ $is_use_door_addr ]]; then
+            door_addr=$is_use_door_addr
+        fi
+        if [[ $is_use_servername ]]; then
+            is_servername=$is_use_servername
+        fi
+        if [[ $is_use_socks_user ]]; then
+            is_socks_user=$is_use_socks_user
+        fi
+        if [[ $is_use_socks_pass ]]; then
+            is_socks_pass=$is_use_socks_pass
+        fi
+    fi
+
+    if [[ $is_use_tls ]]; then
+        if [[ ! $is_no_auto_tls && ! $is_caddy && ! $is_gen && ! $is_dont_test_host ]]; then
+            if [[ $(is_test port_used 80) || $(is_test port_used 443) ]]; then
+                get_port
+                is_http_port=$tmp_port
+                get_port
+                is_https_port=$tmp_port
+                warn "端口 (80 或 443) 已经被占用, 你也可以考虑使用 no-auto-tls"
+                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)\n"
+                msg "\n Caddy 将使用非标准端口实现自动配置 TLS, HTTP:$is_http_port HTTPS:$is_https_port\n"
+                msg "请确定是否继续???"
+                pause
+            fi
+            is_install_caddy=1
+        fi
+        if [[ ! $host ]]; then
+            ask string host "请输入域名:"
+        fi
+        get host-test
+    else
+        if [[ $is_main_start ]]; then
+
+            if [[ ! $port ]]; then
+                get_port
+                port=$tmp_port
+                echo ""
+                echo -e "--------------------------------------------------------"
+                echo -e "端口分配: 已自动为您分配空闲端口 [\e[92m$port\e[0m]"
+                echo -e "--------------------------------------------------------"
+            fi
+
+            case ${is_new_protocol,,} in
+            socks)
+                if [[ ! $is_socks_user ]]; then
+                    ask string is_socks_user "请设置用户名:"
+                fi
+                if [[ ! $is_socks_pass ]]; then
+                    ask string is_socks_pass "请设置密码:"
+                fi
+                ;;
+            shadowsocks)
+                if [[ ! $ss_method ]]; then
+                    ask set_ss_method
+                fi
+                if [[ ! $ss_password ]]; then
+                    ask string ss_password "请设置密码:"
+                fi
+                ;;
+            esac
+
+        fi
+    fi
+
+    if [[ $is_new_protocol == 'Direct' ]]; then
+        if [[ ! $door_addr ]]; then
+            ask string door_addr "请输入目标地址:"
+        fi
+        if [[ ! $door_port ]]; then
+            ask string door_port "请输入目标端口:"
+        fi
+    fi
+
+    if [[ $(grep 2022 <<<$ss_method) ]]; then
+        if [[ $ss_password ]]; then
+            is_test_json=1
+            create server Shadowsocks
+            if [[ ! $tmp_uuid ]]; then
+                get_uuid
+            fi
+            is_test_json_save=$is_conf_dir/tmp-test-$tmp_uuid
+            cat <<<"$is_new_json" >$is_test_json_save
+            $is_core_bin check -c $is_test_json_save &>/dev/null
+            if [[ $? != 0 ]]; then
+                warn "Shadowsocks 协议 ($ss_method) 不支持使用密码 ($(_red_bg $ss_password))\n\n你可以使用命令: $(_green $is_core ss2022) 生成支持的密码.\n\n脚本将自动创建可用密码:)"
+                ss_password=
+                json_str=
+            fi
+            is_test_json=
+            rm -f $is_test_json_save
+        fi
+    fi
+
+    echo ""
+    echo -e "--------------------------------------------------------"
+    read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi): " custom_remark
+    if [[ -z "$custom_remark" ]]; then
+        custom_remark="luopojunzi"
+    fi
+    echo -e "--------------------------------------------------------"
+
+    if [[ $is_install_caddy ]]; then
+        get install-caddy
+    fi
+
+    create server $is_new_protocol
+    info
+}
+
 get() {
     case $1 in
     addr)
@@ -1285,343 +1671,6 @@ info() {
     footer_msg
 }
 
-show_all_nodes() {
-    is_dont_auto_exit=1
-    is_show_all=1
-    clear
-    echo -e "\e[96m=====================================================\e[0m"
-    echo -e "              Sing-box-LPMG 节点配置总览"
-    echo -e "\e[96m=====================================================\e[0m\n"
-    
-    local config_count=0
-    for v in $(ls $is_conf_dir | grep .json$ | sed '/dynamic-port-.*-link/d'); do
-        ((config_count++))
-        unset is_protocol port uuid password net is_url custom_remark is_json_str
-        get info $v > /dev/null 2>&1
-        info $v
-    done
-    
-    if [[ $config_count -eq 0 ]]; then
-        echo -e " \e[91m目前没有找到任何节点配置，请先添加配置。\e[0m\n"
-    else
-        echo -e "\n \e[92m共为您列出 $config_count 个节点链接，请直接复制上方链接使用。\e[0m\n"
-    fi
-    
-    is_show_all=
-    is_dont_auto_exit=
-    pause
-}
-
-add() {
-    unset custom_remark
-    is_lower=${1,,}
-    if [[ $is_lower ]]; then
-        case $is_lower in
-        ws | tcp | quic | http)
-            is_new_protocol=VMess-${is_lower^^}
-            ;;
-        wss | h2 | hu | vws | vh2 | vhu | tws | th2 | thu)
-            is_new_protocol=$(sed -E "s/^V/VLESS-/;s/^T/Trojan-/;/^(W|H)/{s/^/VMess-/};s/WSS/WS/;s/HU/HTTPUpgrade/" <<<${is_lower^^})-TLS
-            ;;
-        r | reality)
-            is_new_protocol=VLESS-REALITY
-            ;;
-        rh2)
-            is_new_protocol=VLESS-HTTP2-REALITY
-            ;;
-        ss)
-            is_new_protocol=Shadowsocks
-            ;;
-        door | direct)
-            is_new_protocol=Direct
-            ;;
-        tuic)
-            is_new_protocol=TUIC
-            ;;
-        hy | hy2 | hysteria*)
-            is_new_protocol=Hysteria2
-            ;;
-        trojan)
-            is_new_protocol=Trojan
-            ;;
-        socks)
-            is_new_protocol=Socks
-            ;;
-        *)
-            for v in ${protocol_list[@]}; do
-                if [[ $(grep -E -i "^$is_lower$" <<<$v) ]]; then
-                    is_new_protocol=$v
-                    break
-                fi
-            done
-
-            if [[ ! $is_new_protocol ]]; then
-                err "无法识别 ($1), 请使用: $is_core add [protocol] [args... | auto]"
-            fi
-            ;;
-        esac
-    fi
-
-    if [[ ! $is_new_protocol ]]; then
-        ask set_protocol
-    fi
-
-    case ${is_new_protocol,,} in
-    *-tls)
-        is_use_tls=1
-        is_use_host=$2
-        is_use_uuid=$3
-        is_use_path=$4
-        is_add_opts="[host] [uuid] [/path]"
-        ;;
-    vmess* | tuic*)
-        is_use_port=$2
-        is_use_uuid=$3
-        is_add_opts="[port] [uuid]"
-        ;;
-    trojan* | hysteria*)
-        is_use_port=$2
-        is_use_pass=$3
-        is_add_opts="[port] [password]"
-        ;;
-    *reality*)
-        is_reality=1
-        is_use_port=$2
-        is_use_uuid=$3
-        is_use_servername=$4
-        is_add_opts="[port] [uuid] [sni]"
-        ;;
-    shadowsocks)
-        is_use_port=$2
-        is_use_pass=$3
-        is_use_method=$4
-        is_add_opts="[port] [password] [method]"
-        ;;
-    direct)
-        is_use_port=$2
-        is_use_door_addr=$3
-        is_use_door_port=$4
-        is_add_opts="[port] [remote_addr] [remote_port]"
-        ;;
-    socks)
-        is_socks=1
-        is_use_port=$2
-        is_use_socks_user=$3
-        is_use_socks_pass=$4
-        is_add_opts="[port] [username] [password]"
-        ;;
-    esac
-
-    if [[ $1 && ! $is_change ]]; then
-        msg "\n使用协议: $is_new_protocol"
-        is_err_tips="\n\n请使用: $(_green $is_core add $1 $is_add_opts) 来添加 $is_new_protocol 配置"
-    fi
-
-    if [[ $is_set_new_protocol ]]; then
-        case $is_old_net in
-        h2 | ws | httpupgrade)
-            old_host=$host
-            if [[ ! $is_use_tls ]]; then
-                unset host is_no_auto_tls
-            fi
-            ;;
-        reality)
-            net_type=
-            if [[ ! $(grep -i reality <<<$is_new_protocol) ]]; then
-                is_reality=
-            fi
-            ;;
-        ss)
-            if [[ $(is_test uuid $ss_password) ]]; then
-                uuid=$ss_password
-            fi
-            ;;
-        esac
-        if [[ ! $(is_test uuid $uuid) ]]; then
-            uuid=
-        fi
-        if [[ $(is_test uuid $password) ]]; then
-            uuid=$password
-        fi
-    fi
-
-    if [[ $is_no_auto_tls && ! $is_use_tls ]]; then
-        err "$is_new_protocol 不支持手动配置 tls."
-    fi
-
-    if [[ $2 ]]; then
-        for v in is_use_port is_use_uuid is_use_host is_use_path is_use_pass is_use_method is_use_door_addr is_use_door_port; do
-            if [[ ${!v} == 'auto' ]]; then
-                unset $v
-            fi
-        done
-
-        if [[ $is_use_port ]]; then
-            if [[ ! $(is_test port ${is_use_port}) ]]; then
-                err "($is_use_port) 不是一个有效的端口. $is_err_tips"
-            fi
-            if [[ $(is_test port_used $is_use_port) && ! $is_gen ]]; then
-                err "无法使用 ($is_use_port) 端口. $is_err_tips"
-            fi
-            port=$is_use_port
-        fi
-        if [[ $is_use_door_port ]]; then
-            if [[ ! $(is_test port ${is_use_door_port}) ]]; then
-                err "(${is_use_door_port}) 不是一个有效的目标端口. $is_err_tips"
-            fi
-            door_port=$is_use_door_port
-        fi
-        if [[ $is_use_uuid ]]; then
-            if [[ ! $(is_test uuid $is_use_uuid) ]]; then
-                err "($is_use_uuid) 不是一个有效的 UUID. $is_err_tips"
-            fi
-            uuid=$is_use_uuid
-        fi
-        if [[ $is_use_path ]]; then
-            if [[ ! $(is_test path $is_use_path) ]]; then
-                err "($is_use_path) 不是有效的路径. $is_err_tips"
-            fi
-            path=$is_use_path
-        fi
-        if [[ $is_use_method ]]; then
-            is_tmp_use_name=加密方式
-            is_tmp_list=${ss_method_list[@]}
-            for v in ${is_tmp_list[@]}; do
-                if [[ $(grep -E -i "^${is_use_method}$" <<<$v) ]]; then
-                    is_tmp_use_type=$v
-                    break
-                fi
-            done
-            if [[ ! ${is_tmp_use_type} ]]; then
-                warn "(${is_use_method}) 不是一个可用的${is_tmp_use_name}."
-                msg "${is_tmp_use_name}可用如下: "
-                for v in ${is_tmp_list[@]}; do
-                    msg "\t\t$v"
-                done
-                msg "$is_err_tips\n"
-                exit 1
-            fi
-            ss_method=$is_tmp_use_type
-        fi
-        if [[ $is_use_pass ]]; then
-            ss_password=$is_use_pass
-            password=$is_use_pass
-        fi
-        if [[ $is_use_host ]]; then
-            host=$is_use_host
-        fi
-        if [[ $is_use_door_addr ]]; then
-            door_addr=$is_use_door_addr
-        fi
-        if [[ $is_use_servername ]]; then
-            is_servername=$is_use_servername
-        fi
-        if [[ $is_use_socks_user ]]; then
-            is_socks_user=$is_use_socks_user
-        fi
-        if [[ $is_use_socks_pass ]]; then
-            is_socks_pass=$is_use_socks_pass
-        fi
-    fi
-
-    if [[ $is_use_tls ]]; then
-        if [[ ! $is_no_auto_tls && ! $is_caddy && ! $is_gen && ! $is_dont_test_host ]]; then
-            if [[ $(is_test port_used 80) || $(is_test port_used 443) ]]; then
-                get_port
-                is_http_port=$tmp_port
-                get_port
-                is_https_port=$tmp_port
-                warn "端口 (80 或 443) 已经被占用, 你也可以考虑使用 no-auto-tls"
-                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)\n"
-                msg "\n Caddy 将使用非标准端口实现自动配置 TLS, HTTP:$is_http_port HTTPS:$is_https_port\n"
-                msg "请确定是否继续???"
-                pause
-            fi
-            is_install_caddy=1
-        fi
-        if [[ ! $host ]]; then
-            ask string host "请输入域名:"
-        fi
-        get host-test
-    else
-        if [[ $is_main_start ]]; then
-
-            if [[ ! $port ]]; then
-                get_port
-                port=$tmp_port
-                echo ""
-                echo -e "--------------------------------------------------------"
-                echo -e "端口分配: 已自动为您分配空闲端口 [\e[92m$port\e[0m]"
-                echo -e "--------------------------------------------------------"
-            fi
-
-            case ${is_new_protocol,,} in
-            socks)
-                if [[ ! $is_socks_user ]]; then
-                    ask string is_socks_user "请设置用户名:"
-                fi
-                if [[ ! $is_socks_pass ]]; then
-                    ask string is_socks_pass "请设置密码:"
-                fi
-                ;;
-            shadowsocks)
-                if [[ ! $ss_method ]]; then
-                    ask set_ss_method
-                fi
-                if [[ ! $ss_password ]]; then
-                    ask string ss_password "请设置密码:"
-                fi
-                ;;
-            esac
-
-        fi
-    fi
-
-    if [[ $is_new_protocol == 'Direct' ]]; then
-        if [[ ! $door_addr ]]; then
-            ask string door_addr "请输入目标地址:"
-        fi
-        if [[ ! $door_port ]]; then
-            ask string door_port "请输入目标端口:"
-        fi
-    fi
-
-    if [[ $(grep 2022 <<<$ss_method) ]]; then
-        if [[ $ss_password ]]; then
-            is_test_json=1
-            create server Shadowsocks
-            if [[ ! $tmp_uuid ]]; then
-                get_uuid
-            fi
-            is_test_json_save=$is_conf_dir/tmp-test-$tmp_uuid
-            cat <<<"$is_new_json" >$is_test_json_save
-            $is_core_bin check -c $is_test_json_save &>/dev/null
-            if [[ $? != 0 ]]; then
-                warn "Shadowsocks 协议 ($ss_method) 不支持使用密码 ($(_red_bg $ss_password))\n\n你可以使用命令: $(_green $is_core ss2022) 生成支持的密码.\n\n脚本将自动创建可用密码:)"
-                ss_password=
-                json_str=
-            fi
-            is_test_json=
-            rm -f $is_test_json_save
-        fi
-    fi
-
-    echo ""
-    echo -e "--------------------------------------------------------"
-    read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi): " custom_remark
-    if [[ -z "$custom_remark" ]]; then
-        custom_remark="luopojunzi"
-    fi
-    echo -e "--------------------------------------------------------"
-
-    if [[ $is_install_caddy ]]; then
-        get install-caddy
-    fi
-
-    create server $is_new_protocol
-    info
-}
-
 footer_msg() {
     if [[ $is_core_stop && ! $is_new_json ]]; then
         warn "$is_core_name 当前处于停止状态."
@@ -1720,84 +1769,58 @@ update() {
     fi
 }
 
-uninstall() {
-    if [[ $is_caddy ]]; then
-        is_tmp_list=("卸载 $is_core_name" "卸载 ${is_core_name} & Caddy")
-        ask list is_do_uninstall
-    else
-        ask string y "是否卸载 ${is_core_name}? [y]:"
-    fi
-    manage stop &>/dev/null
-    manage disable &>/dev/null
-    
-    crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
-
-    rm -rf $is_core_dir $is_log_dir $is_sh_bin ${is_sh_bin/$is_core/sb} /lib/systemd/system/$is_core.service
-    sed -i "/$is_core/d" /root/.bashrc
-    
-    if [[ $REPLY == '2' ]]; then
-        manage stop caddy &>/dev/null
-        manage disable caddy &>/dev/null
-        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service
-    fi
-    if [[ $is_install_sh ]]; then
-        return
-    fi
-    _green "\n卸载完成!"
-    msg "脚本哪里需要完善? 请反馈"
-    msg "反馈问题) $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG/issues)\n"
+cron_task() {
+    msg "\n------------- 自动维护任务 (Cron) -------------"
+    msg "注意: 日志清理是保持 VPS 稳定运行的必要选项."
+    msg "1. 启用: 自动更新核心 + 自动清空日志 (推荐)"
+    msg "2. 启用: 仅自动清空日志 (手动更新核心)"
+    msg "3. 关闭: 停止所有自动维护任务"
+    msg "4. 退出"
+    ask list is_do_cron null "请选择 [1-4]:"
+    case $REPLY in
+    1)
+        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 3 * * 1 /usr/local/bin/sing-box update core >/dev/null 2>&1"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
+        _green "\n已设置: 每周一自动更新核心，每天自动清空日志！(无人值守模式已开启)\n"
+        ;;
+    2)
+        (crontab -l 2>/dev/null | grep -v -E "sing-box update core|/var/log/sing-box"; echo "0 4 * * * echo > /var/log/sing-box/access.log 2>/dev/null; echo > /var/log/sing-box/error.log 2>/dev/null") | crontab -
+        _green "\n已设置: 每天凌晨 04:00 自动清空日志释放硬盘空间。\n"
+        ;;
+    3)
+        crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
+        _green "\n已关闭: 所有 Sing-box 相关的定时维护任务\n"
+        ;;
+    4)
+        exit
+        ;;
+    esac
 }
 
-manage() {
-    if [[ $is_dont_auto_exit ]]; then
-        return
+show_all_nodes() {
+    is_dont_auto_exit=1
+    is_show_all=1
+    clear
+    echo -e "\e[96m=====================================================\e[0m"
+    echo -e "              Sing-box-LPMG 节点配置总览"
+    echo -e "\e[96m=====================================================\e[0m\n"
+    
+    local config_count=0
+    for v in $(ls $is_conf_dir | grep .json$ | sed '/dynamic-port-.*-link/d'); do
+        ((config_count++))
+        unset is_protocol port uuid password net is_url custom_remark is_json_str
+        get info $v > /dev/null 2>&1
+        info $v
+    done
+    
+    if [[ $config_count -eq 0 ]]; then
+        echo -e " \e[91m目前没有找到任何节点配置，请先添加配置。\e[0m\n"
+    else
+        echo -e "\n \e[92m共为您列出 $config_count 个节点链接，请直接复制上方链接使用。\e[0m\n"
     fi
-    case $1 in
-    1 | start)
-        is_do=start
-        is_do_msg=启动
-        is_test_run=1
-        ;;
-    2 | stop)
-        is_do=stop
-        is_do_msg=停止
-        ;;
-    3 | r | restart)
-        is_do=restart
-        is_do_msg=重启
-        is_test_run=1
-        ;;
-    *)
-        is_do=$1
-        is_do_msg=$1
-        ;;
-    esac
-    case $2 in
-    caddy)
-        is_do_name=$2
-        is_run_bin=$is_caddy_bin
-        is_do_name_msg=Caddy
-        ;;
-    *)
-        is_do_name=$is_core
-        is_run_bin=$is_core_bin
-        is_do_name_msg=$is_core_name
-        ;;
-    esac
-    systemctl $is_do $is_do_name
-    if [[ $is_test_run && ! $is_new_install ]]; then
-        sleep 2
-        if [[ ! $(pgrep -f $is_run_bin) ]]; then
-            is_run_fail=${is_do_name_msg,,}
-            if [[ ! $is_no_manage_msg ]]; then
-                msg
-                warn "($is_do_msg) $is_do_name_msg 失败"
-                _yellow "检测到运行失败, 自动执行测试运行."
-                get test-run
-                _yellow "测试结束, 请按 Enter 退出."
-            fi
-        fi
-    fi
+    
+    is_show_all=
+    is_dont_auto_exit=
+    pause
 }
 
 is_main_menu() {
