@@ -10,7 +10,7 @@ bash <(wget -qO- -o- https://github.com/233boy/sing-box/raw/main/install.sh)
 
 ---
 
-# Sing-box-LPMG 魔改版一键脚本完整使用文档
+# Sing-box-LPMG 一键脚本完整使用文档
 
 **Sing-box-LPMG** 是一款专为 Linux 服务器设计的 sing-box 一键安装管理脚本。它基于 [233boy](https://github.com/233boy/sing-box) 项目的核心逻辑进行深度重构，旨在提供**更美观的视觉体验、更智能的自动化运维以及更严谨的隐私保护**。
 
