@@ -113,6 +113,33 @@ get_ip() {
     }
 }
 
+# ==============================================================
+# 新增功能：智能防火墙放行
+# ==============================================================
+firewall_allow() {
+    local target_port=$1
+    [[ -z "$target_port" ]] && return
+    
+    if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+        ufw allow ${target_port}/tcp >/dev/null 2>&1
+        ufw allow ${target_port}/udp >/dev/null 2>&1
+        msg "✅ 防火墙 (UFW): 已自动放行端口 ${target_port}"
+    elif command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active firewalld | grep -q "^active"; then
+        firewall-cmd --add-port=${target_port}/tcp --permanent >/dev/null 2>&1
+        firewall-cmd --add-port=${target_port}/udp --permanent >/dev/null 2>&1
+        firewall-cmd --reload >/dev/null 2>&1
+        msg "✅ 防火墙 (Firewalld): 已自动放行端口 ${target_port}"
+    elif command -v iptables >/dev/null 2>&1; then
+        iptables -I INPUT -p tcp --dport ${target_port} -j ACCEPT >/dev/null 2>&1
+        iptables -I INPUT -p udp --dport ${target_port} -j ACCEPT >/dev/null 2>&1
+        # CentOS iptables save
+        [[ -f /etc/sysconfig/iptables ]] && service iptables save >/dev/null 2>&1
+        # Ubuntu/Debian iptables save
+        [[ command -v netfilter-persistent >/dev/null 2>&1 ]] && netfilter-persistent save >/dev/null 2>&1
+        msg "✅ 防火墙 (Iptables): 已尝试放行端口 ${target_port}"
+    fi
+}
+
 get_port() {
     is_count=0
     while :; do
@@ -126,6 +153,11 @@ get_port() {
         tmp_port=$(shuf -i 20000-65535 -n 1)
         [[ ! $(is_test port_used $tmp_port) && $tmp_port != $port ]] && break
     done
+    
+    # 拿到端口后，自动尝试放行防火墙
+    if [[ $tmp_port ]]; then
+        firewall_allow "$tmp_port"
+    fi
 }
 
 get_pbk() {
@@ -650,7 +682,7 @@ uninstall() {
     manage disable &>/dev/null
     
     # =======================================================
-    # 新增：卸载时彻底清除配套的定时自愈任务
+    # 卸载时彻底清除配套的定时自愈任务
     crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
     # =======================================================
 
@@ -926,9 +958,6 @@ add() {
         # for main menu start, dont auto create args
         if [[ $is_main_start ]]; then
 
-            # ==============================================================
-            # 新增功能：自动分配 20000 以上的随机可用端口，不再询问用户
-            # ==============================================================
             if [[ ! $port ]]; then
                 get_port
                 port=$tmp_port
@@ -937,7 +966,6 @@ add() {
                 echo -e "端口分配: 已自动为您分配空闲端口 [\e[92m$port\e[0m]"
                 echo -e "--------------------------------------------------------"
             fi
-            # ==============================================================
 
             case ${is_new_protocol,,} in
             socks)
@@ -1256,7 +1284,7 @@ info() {
     # ==============================================================
     # 新增功能：提示用户输入自定义备注 (如果是在添加/生成模式下)
     # ==============================================================
-    if [[ ! $is_dont_show_info && ! $is_gen && ! $is_dont_auto_exit && $is_change != 1 && ! $is_url ]]; then
+    if [[ ! $is_dont_show_info && ! $is_gen && ! $is_dont_auto_exit && $is_change != 1 && ! $is_url && ! $is_show_all ]]; then
         echo ""
         echo -e "--------------------------------------------------------"
         read -p "请输入该节点的自定义备注 (如留空按回车，则默认使用 luopojunzi-$port): " custom_remark
@@ -1363,6 +1391,15 @@ info() {
         is_url="socks://$(echo -n ${is_socks_user}:${is_socks_pass} | base64 -w 0)@${is_addr}:${port}#$custom_remark"
         ;;
     esac
+    
+    # 新增逻辑：如果是“一键查看所有”模式，只打印简略信息和URL
+    if [[ $is_show_all ]]; then
+        echo -e "\e[93m[${is_config_name}]\e[0m 协议: \e[96m${is_protocol}\e[0m | 端口: \e[92m${port}\e[0m"
+        echo -e "\e[4;${is_color}m${is_url}\e[0m"
+        echo -e "\e[90m-----------------------------------------------------\e[0m"
+        return
+    fi
+    
     [[ $is_dont_show_info || $is_gen || $is_dont_auto_exit ]] && return # dont show info
     msg "-------------- $is_config_name -------------"
     for ((i = 0; i < ${#is_info_show[@]}; i++)); do
@@ -1391,6 +1428,34 @@ info() {
         msg "\e[41m帮助(help)\e[0m: $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG)"
     fi
     footer_msg
+}
+
+# ==============================================================
+# 新增功能：一键查看所有节点的简明信息与URL
+# ==============================================================
+show_all_nodes() {
+    is_dont_auto_exit=1
+    is_show_all=1
+    clear
+    echo -e "\e[96m=====================================================\e[0m"
+    echo -e "\e[96m              Sing-box-LPMG 节点配置总览\e[0m"
+    echo -e "\e[96m=====================================================\e[0m\n"
+    
+    local config_count=0
+    for v in $(ls $is_conf_dir | grep .json$ | sed '/dynamic-port-.*-link/d'); do
+        ((config_count++))
+        info $v
+    done
+    
+    if [[ $config_count -eq 0 ]]; then
+        echo -e " \e[91m目前没有找到任何节点配置，请先添加配置。\e[0m\n"
+    else
+        echo -e "\n \e[92m共为您列出 $config_count 个节点链接，请直接复制上方链接使用。\e[0m\n"
+    fi
+    
+    is_show_all=
+    is_dont_auto_exit=
+    pause
 }
 
 # footer msg
@@ -1515,7 +1580,7 @@ cron_task() {
 }
 
 # ==============================================================
-# 新增功能：现代面板风 TUI 菜单
+# 现代面板风 TUI 菜单
 # ==============================================================
 is_main_menu() {
     is_main_start=1
@@ -1532,14 +1597,15 @@ is_main_menu() {
         
         echo -e "  \e[93m◈ 节点管理\e[0m"
         echo -e "    \e[92m(1)\e[0m 添加配置        \e[92m(2)\e[0m 更改配置"
-        echo -e "    \e[92m(3)\e[0m 查看配置        \e[92m(4)\e[0m 删除配置\n"
+        echo -e "    \e[92m(3)\e[0m 查看单节点      \e[92m(4)\e[0m 删除配置\n"
         
         echo -e "  \e[93m◈ 系统控制\e[0m"
         echo -e "    \e[92m(5)\e[0m 启动/停止       \e[92m(6)\e[0m 自动更新/清理"
         echo -e "    \e[92m(7)\e[0m 完全卸载        \e[92m(8)\e[0m 帮助文档\n"
         
         echo -e "  \e[93m◈ 高级工具\e[0m"
-        echo -e "    \e[92m(9)\e[0m 进阶选项 (BBR/手动更新/等)  \e[92m(10)\e[0m 关于本脚本"
+        echo -e "    \e[92m(9)\e[0m 进阶选项 (\e[91m一键查看所有节点\e[0m / BBR / 等)"
+        echo -e "   \e[92m(10)\e[0m 关于本脚本"
         echo -e "\e[90m-----------------------------------------------------\e[0m"
         
         echo -ne "➡️ 请输入对应的数字进行操作 [\e[91m1-10\e[0m]: "
@@ -1580,27 +1646,30 @@ is_main_menu() {
         show_help
         ;;
     9)
-        ask list is_do_other "启用BBR 查看日志 测试运行 重装脚本 设置DNS 手动更新"
+        ask list is_do_other "一键查看所有节点信息 启用BBR 查看日志 测试运行 重装脚本 设置DNS 手动更新"
         case $REPLY in
         1)
+            show_all_nodes
+            ;;
+        2)
             load bbr.sh
             _try_enable_bbr
             ;;
-        2)
+        3)
             load log.sh
             log_set
             ;;
-        3)
+        4)
             get test-run
             ;;
-        4)
+        5)
             get reinstall
             ;;
-        5)
+        6)
             load dns.sh
             dns_set
             ;;
-        6)
+        7)
             is_tmp_list=("更新$is_core_name" "更新脚本")
             [[ $is_caddy ]] && is_tmp_list+=("更新Caddy")
             ask list is_do_update null "\n请选择手动更新:\n"
@@ -1682,6 +1751,9 @@ main() {
         ;;
     cron)
         cron_task
+        ;;
+    all)
+        show_all_nodes
         ;;
     debug)
         is_debug=1
