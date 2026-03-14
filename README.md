@@ -1,7 +1,10 @@
 # 介绍
 
 最好用的 sing-box 一键安装脚本 & 管理脚本，基于 [233boy](https://github.com/233boy/sing-box) 原版二次开发
-
+# 快速安装
+```
+bash <(curl -s -L https://raw.githubusercontent.com/LuoPoJunZi/Sing-box-LPMG/main/install.sh)
+```
 # 特点
 
 - 快速安装
