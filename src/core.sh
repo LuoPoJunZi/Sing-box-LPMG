@@ -154,7 +154,7 @@ EOF
     systemctl enable --now cftunnel-${l_port}.service &>/dev/null
     msg "✅ CFtunnel 穿透守护服务 (关联内部端口: ${l_port}) 已创建并启动."
     msg "⚠️  $(_yellow "重要：你还需要在 Cloudflare 面板完成最后一步映射！")"
-    msg "👉 $(_cyan "图文配置教程：https://你的域名.com/cftunnel-guide/")"
+    msg "👉 $(_cyan "图文配置教程：https://github.com/LuoPoJunZi/Sing-box-LPMG/blob/main/CFTunnels.md")"
 }
 
 firewall_allow() {
@@ -279,7 +279,7 @@ ask() {
         echo -e "                 请选择要添加的协议"
         echo -e "\e[96m=====================================================\e[0m"
         echo -e "  \e[93m[ 基础协议 ]\e[0m"
-        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan      \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
+        echo -e "  \e[92m(1)\e[0m TUIC        \e[92m(2)\e[0m Trojan       \e[92m(3)\e[0m Hysteria2   \e[92m(4)\e[0m VMess-WS"
         echo -e "  \e[92m(5)\e[0m VMess-TCP   \e[92m(6)\e[0m VMess-HTTP   \e[92m(7)\e[0m VMess-QUIC  \e[92m(8)\e[0m Shadowsocks"
         echo -e "  \e[93m[ TLS 隧道 ]\e[0m"
         echo -e "  \e[92m(9)\e[0m VMess-H2    \e[92m(10)\e[0m VMess-WS   \e[92m(11)\e[0m VLESS-H2   \e[92m(12)\e[0m VLESS-WS"
