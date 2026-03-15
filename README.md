@@ -11,6 +11,50 @@ bash <(curl -s -L https://github.com/LuoPoJunZi/Sing-box-LPMG/raw/main/install.s
 bash <(wget -qO- -o- https://github.com/233boy/sing-box/raw/main/install.sh)
 ```
 
+# 我的脚本卸载不掉怎么办？
+
+不要紧，既然脚本自己动不了手，我们就直接用 Linux 原生命令进行**“物理超度”**，手动把它的所有残留连根拔起。
+
+请直接复制以下这段完整的命令，一次性粘贴到终端并回车。它会帮你停止服务、清理定时任务、删除所有文件和快捷指令：
+
+```bash
+# 1. 停止并禁用相关服务
+systemctl stop sing-box caddy 2>/dev/null
+systemctl disable sing-box caddy 2>/dev/null
+
+# 2. 删除 Sing-box 和可能存在的 CFtunnel 守护服务文件
+rm -f /lib/systemd/system/sing-box.service
+rm -f /lib/systemd/system/cftunnel-*.service
+systemctl daemon-reload
+
+# 3. 清理自动更新和日志清理的定时任务
+crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
+
+# 4. 删除所有核心文件、配置目录和日志
+rm -rf /etc/sing-box /var/log/sing-box /usr/local/bin/sing-box /usr/local/bin/sb
+
+# 5. 清理环境变量中的快捷命令别名并使其生效
+sed -i "/sing-box/d" /root/.bashrc
+sed -i "/alias sb=/d" /root/.bashrc
+source /root/.bashrc
+
+echo -e "\n✅ 物理清理完成！系统已恢复纯净状态。"
+
+```
+
+执行完这段代码后，你的服务器上就不会再有任何这个半成品的痕迹了。
+
+### 下一步
+
+当你看到 `✅ 物理清理完成！` 的提示后，你可以放心地重新运行你更新好的官方安装指令，重新部署完美版：
+
+```bash
+bash <(curl -s -L https://github.com/LuoPoJunZi/Sing-box-LPMG/raw/main/install.sh)
+
+```
+
+
+
 ---
 
 # Sing-box-LPMG 一键脚本完整使用文档
