@@ -120,9 +120,6 @@ get_ip() {
     fi
 }
 
-# ==============================================================
-# CFtunnel 云穿透核心守护服务
-# ==============================================================
 install_cloudflared() {
     if [[ ! $(type -P cloudflared) ]]; then
         msg "正在下载并安装 Cloudflare Tunnel (cloudflared)..."
@@ -156,7 +153,8 @@ EOF
     systemctl daemon-reload
     systemctl enable --now cftunnel-${l_port}.service &>/dev/null
     msg "✅ CFtunnel 穿透守护服务 (关联内部端口: ${l_port}) 已创建并启动."
-    msg "⚠️  $(_yellow "请务必前往 Cloudflare Zero Trust 面板，将 Public Hostname 映射至: http://127.0.0.1:${l_port}")"
+    msg "⚠️  $(_yellow "重要：你还需要在 Cloudflare 面板完成最后一步映射！")"
+    msg "👉 $(_cyan "图文配置教程：https://你的域名.com/cftunnel-guide/")"
 }
 
 firewall_allow() {
@@ -847,7 +845,6 @@ del() {
         fi
         rm -rf $is_conf_dir/"$is_config_file"
         
-        # 联动卸载 CFtunnel 守护服务
         if [[ $is_config_file =~ "CFtunnel" ]]; then
             local del_port=$(echo $is_config_file | grep -oE "[0-9]+")
             if [[ $del_port ]]; then
@@ -1668,7 +1665,6 @@ add() {
                 echo -e "--------------------------------------------------------"
             fi
             
-            # 针对 CFtunnel 独有的交互 Token
             if [[ $is_new_protocol == 'CFtunnel' ]]; then
                 if [[ ! $cf_token ]]; then
                     ask string cf_token "请输入 Cloudflare Tunnel Token:"
@@ -1837,6 +1833,86 @@ update() {
     msg "$(_green 请查看更新说明: https://github.com/$is_update_repo/releases/tag/$is_new_ver)\n"
     if [[ $is_update_name != 'sh' ]]; then
         manage restart $is_update_name &
+    fi
+}
+
+uninstall() {
+    if [[ $is_caddy ]]; then
+        is_tmp_list=("卸载 $is_core_name" "卸载 ${is_core_name} & Caddy")
+        ask list is_do_uninstall
+    else
+        ask string y "是否卸载 ${is_core_name}? [y]:"
+    fi
+    manage stop &>/dev/null
+    manage disable &>/dev/null
+    
+    crontab -l 2>/dev/null | grep -v -E "sing-box update|/var/log/sing-box" | crontab -
+
+    rm -rf $is_core_dir $is_log_dir $is_sh_bin ${is_sh_bin/$is_core/sb} /lib/systemd/system/$is_core.service
+    sed -i "/$is_core/d" /root/.bashrc
+    
+    if [[ $REPLY == '2' ]]; then
+        manage stop caddy &>/dev/null
+        manage disable caddy &>/dev/null
+        rm -rf $is_caddy_dir $is_caddy_bin /lib/systemd/system/caddy.service
+    fi
+    if [[ $is_install_sh ]]; then
+        return
+    fi
+    _green "\n卸载完成!"
+    msg "脚本哪里需要完善? 请反馈"
+    msg "反馈问题) $(msg_ul https://github.com/LuoPoJunZi/Sing-box-LPMG/issues)\n"
+}
+
+manage() {
+    if [[ $is_dont_auto_exit ]]; then
+        return
+    fi
+    case $1 in
+    1 | start)
+        is_do=start
+        is_do_msg=启动
+        is_test_run=1
+        ;;
+    2 | stop)
+        is_do=stop
+        is_do_msg=停止
+        ;;
+    3 | r | restart)
+        is_do=restart
+        is_do_msg=重启
+        is_test_run=1
+        ;;
+    *)
+        is_do=$1
+        is_do_msg=$1
+        ;;
+    esac
+    case $2 in
+    caddy)
+        is_do_name=$2
+        is_run_bin=$is_caddy_bin
+        is_do_name_msg=Caddy
+        ;;
+    *)
+        is_do_name=$is_core
+        is_run_bin=$is_core_bin
+        is_do_name_msg=$is_core_name
+        ;;
+    esac
+    systemctl $is_do $is_do_name
+    if [[ $is_test_run && ! $is_new_install ]]; then
+        sleep 2
+        if [[ ! $(pgrep -f $is_run_bin) ]]; then
+            is_run_fail=${is_do_name_msg,,}
+            if [[ ! $is_no_manage_msg ]]; then
+                msg
+                warn "($is_do_msg) $is_do_name_msg 失败"
+                _yellow "检测到运行失败, 自动执行测试运行."
+                get test-run
+                _yellow "测试结束, 请按 Enter 退出."
+            fi
+        fi
     fi
 }
 
